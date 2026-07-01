@@ -6,29 +6,29 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
-  Car,
-  CheckCircle2,
-  AlertTriangle,
-  DollarSign,
+  Activity,
   Plus,
+  Search,
+  Filter,
   X,
-  TrendingUp,
-  Clock,
-  ArrowRightLeft,
+  Car,
   User,
-  MapPin,
   Calendar,
-  AlertCircle
+  Gauge,
+  DollarSign,
+  TrendingUp,
+  AlertCircle,
+  CheckCircle2,
+  Clock,
+  ArrowRightLeft
 } from 'lucide-react';
 
-// Interfaces matching Database
 interface Vehicle {
   id: string;
   plate_number: string;
   model: string;
   current_mileage: number;
   status: 'available' | 'in_operation' | 'maintenance';
-  external_supplier?: string | null;
 }
 
 interface Driver {
@@ -65,12 +65,11 @@ interface OperationOrder {
   expenses?: Expense[];
 }
 
-// Mock database to fall back on if Supabase tables don't exist yet
 const mockVehicles: Vehicle[] = [
   { id: 'v1', plate_number: 'أ ب ج 1234', model: 'هيونداي إلنترا 2023', current_mileage: 45000, status: 'in_operation' },
   { id: 'v2', plate_number: 'د هـ و 5678', model: 'تويوتا كامري 2022', current_mileage: 72100, status: 'available' },
   { id: 'v3', plate_number: 'س ش ص 9012', model: 'كيا سبورتيج 2024', current_mileage: 12000, status: 'available' },
-  { id: 'v4', plate_number: 'ق ر س 3456', model: 'نيسان صني 2021', current_mileage: 95400, status: 'maintenance', external_supplier: 'مكتب الوفاق' },
+  { id: 'v4', plate_number: 'ق ر س 3456', model: 'نيسان صني 2021', current_mileage: 95400, status: 'maintenance' },
   { id: 'v5', plate_number: 'ط ظ ع 7890', model: 'مازدا 6 2023', current_mileage: 38200, status: 'available' }
 ];
 
@@ -123,18 +122,22 @@ const mockOrders: OperationOrder[] = [
   }
 ];
 
-export default function Dashboard() {
+export default function OperationsPage() {
   const [vehicles, setVehicles] = useState<Vehicle[]>(mockVehicles);
   const [drivers, setDrivers] = useState<Driver[]>(mockDrivers);
   const [orders, setOrders] = useState<OperationOrder[]>(mockOrders);
   const [isUsingMock, setIsUsingMock] = useState(true);
 
-  // Forms states
+  // Modal controls
   const [showNewOrderModal, setShowNewOrderModal] = useState(false);
   const [showSettleModal, setShowSettleModal] = useState(false);
   const [selectedOrderToSettle, setSelectedOrderToSettle] = useState<OperationOrder | null>(null);
 
-  // Form inputs
+  // Filter and search
+  const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState('all');
+
+  // New order inputs
   const [newOrder, setNewOrder] = useState({
     vehicle_id: '',
     driver_id: '',
@@ -145,6 +148,7 @@ export default function Dashboard() {
     out_mileage: 0
   });
 
+  // Settle inputs
   const [settlement, setSettlement] = useState({
     return_mileage: 0,
     amount_received: 0,
@@ -153,44 +157,22 @@ export default function Dashboard() {
     newExpense: { category: 'fuel' as Expense['category'], amount: 0, description: '' }
   });
 
-  // Try to connect to Supabase and load live data
   useEffect(() => {
-    async function checkSupabaseConnection() {
+    async function checkSupabase() {
       try {
-        const { data: vData, error: vError } = await supabase.from('vehicles').select('*').limit(1);
-        if (!vError) {
+        const { data, error } = await supabase.from('operation_orders').select('*');
+        if (!error && data) {
           setIsUsingMock(false);
-          loadLiveSupabaseData();
+          loadData();
         }
       } catch {
-        // Fallback silently to mock
         setIsUsingMock(true);
       }
     }
-
-    checkSupabaseConnection();
+    checkSupabase();
   }, []);
 
-  // Realtime updates subscription
-  useEffect(() => {
-    if (isUsingMock) return;
-
-    const channel = supabase
-      .channel('operations_sync')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'operation_orders' }, () => {
-        loadLiveSupabaseData();
-      })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'vehicles' }, () => {
-        loadLiveSupabaseData();
-      })
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [isUsingMock]);
-
-  const loadLiveSupabaseData = async () => {
+  const loadData = async () => {
     const { data: vData } = await supabase.from('vehicles').select('*');
     const { data: dData } = await supabase.from('drivers').select('*');
     const { data: oData } = await supabase.from('operation_orders').select(`
@@ -202,7 +184,6 @@ export default function Dashboard() {
     if (vData) setVehicles(vData as Vehicle[]);
     if (dData) setDrivers(dData as Driver[]);
     if (oData) {
-      // Fetch expenses for each order
       const ordersWithExpenses = await Promise.all(
         oData.map(async (order: any) => {
           const { data: expData } = await supabase
@@ -219,15 +200,6 @@ export default function Dashboard() {
     }
   };
 
-  // Metrics calculations
-  const activeVehiclesCount = vehicles.filter(v => v.status === 'in_operation').length;
-  const availableVehiclesCount = vehicles.filter(v => v.status === 'available').length;
-  const maintenanceVehiclesCount = vehicles.filter(v => v.status === 'maintenance').length;
-  const totalNetProfit = orders
-    .filter(o => o.status === 'closed')
-    .reduce((sum, o) => sum + o.net_profit, 0);
-
-  // Form Handlers
   const handleVehicleChange = (vId: string) => {
     const veh = vehicles.find(v => v.id === vId);
     setNewOrder(prev => ({
@@ -240,12 +212,11 @@ export default function Dashboard() {
   const handleCreateOrder = async (e: React.FormEvent) => {
     e.preventDefault();
     if (isUsingMock) {
-      const newId = `o_${Date.now()}`;
       const selectedVehicle = vehicles.find(v => v.id === newOrder.vehicle_id);
       const selectedDriver = drivers.find(d => d.id === newOrder.driver_id);
 
       const created: OperationOrder = {
-        id: newId,
+        id: `o_${Date.now()}`,
         vehicle_id: newOrder.vehicle_id,
         driver_id: newOrder.driver_id,
         customer_name: newOrder.customer_name,
@@ -263,19 +234,11 @@ export default function Dashboard() {
         expenses: []
       };
 
-      // Update statuses
       setVehicles(prev => prev.map(v => v.id === newOrder.vehicle_id ? { ...v, status: 'in_operation' } : v));
       setDrivers(prev => prev.map(d => d.id === newOrder.driver_id ? { ...d, status: 'in_operation' } : d));
       setOrders(prev => [created, ...prev]);
     } else {
-      // Get Tenant ID
-      const { data: { user } } = await supabase.auth.getUser();
-      const { data: member } = await supabase
-        .from('tenant_members')
-        .select('tenant_id')
-        .eq('user_id', user?.id)
-        .single();
-
+      const { data: member } = await supabase.from('tenant_members').select('tenant_id').limit(1).single();
       if (member) {
         await supabase.from('operation_orders').insert({
           tenant_id: member.tenant_id,
@@ -289,10 +252,10 @@ export default function Dashboard() {
           out_mileage: newOrder.out_mileage,
           status: 'active'
         });
+        loadData();
       }
     }
 
-    // Reset Form
     setNewOrder({
       vehicle_id: '',
       driver_id: '',
@@ -357,12 +320,9 @@ export default function Dashboard() {
         return o;
       }));
 
-      // Release driver and vehicle
       setVehicles(prev => prev.map(v => v.id === selectedOrderToSettle.vehicle_id ? { ...v, status: 'available', current_mileage: settlement.return_mileage } : v));
       setDrivers(prev => prev.map(d => d.id === selectedOrderToSettle.driver_id ? { ...d, status: 'active' } : d));
     } else {
-      // Live Supabase update
-      // Update order details
       await supabase.from('operation_orders').update({
         status: 'closed',
         actual_return_date: new Date().toISOString(),
@@ -371,14 +331,8 @@ export default function Dashboard() {
         amount_paid_to_external_supplier: settlement.amount_paid_supplier,
       }).eq('id', selectedOrderToSettle.id);
 
-      // Insert expenses
       if (settlement.expenses.length > 0) {
-        const { data: member } = await supabase
-          .from('tenant_members')
-          .select('tenant_id')
-          .limit(1)
-          .single();
-
+        const { data: member } = await supabase.from('tenant_members').select('tenant_id').limit(1).single();
         if (member) {
           const insertPayload = settlement.expenses.map(exp => ({
             tenant_id: member.tenant_id,
@@ -390,241 +344,148 @@ export default function Dashboard() {
           await supabase.from('expenses').insert(insertPayload);
         }
       }
+      loadData();
     }
 
     setShowSettleModal(false);
     setSelectedOrderToSettle(null);
   };
 
+  const filteredOrders = orders.filter(o => {
+    const matchesSearch = o.customer_name.toLowerCase().includes(search.toLowerCase()) || 
+                          o.vehicle?.model.toLowerCase().includes(search.toLowerCase()) || 
+                          o.vehicle?.plate_number.includes(search);
+    const matchesFilter = statusFilter === 'all' || o.status === statusFilter;
+    return matchesSearch && matchesFilter;
+  });
+
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 p-4 md:p-8 dir-rtl" style={{ direction: 'rtl' }}>
-      <header className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
+    <div className="flex flex-col gap-6">
+      <header className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
-          <h1 className="text-3xl font-extrabold tracking-tight bg-gradient-to-r from-emerald-400 to-teal-300 bg-clip-text text-transparent">
-            FleetFlow SaaS
-          </h1>
-          <p className="text-slate-400 text-sm mt-1">
-            نظام الإدارة المعماري وتشغيل حركة أساطيل السيارات
-          </p>
+          <h2 className="text-2xl font-black text-slate-100 flex items-center gap-2">
+            <Activity className="w-6 h-6 text-emerald-400" />
+            عمليات التشغيل وحركة السيارات
+          </h2>
+          <p className="text-slate-400 text-xs mt-1">تتبع كافة أذونات وأوامر خروج وعودة سيارات المكتب وتسويتها مالياً</p>
         </div>
 
-        <div className="flex items-center gap-3 w-full md:w-auto">
-          {isUsingMock && (
-            <Badge variant="outline" className="bg-amber-500/10 text-amber-400 border-amber-500/30 gap-1 px-3 py-1 flex items-center">
-              <AlertCircle className="w-3.5 h-3.5" />
-              بيانات محاكاة نشطة
-            </Badge>
-          )}
-          <Button
-            onClick={() => setShowNewOrderModal(true)}
-            className="bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 text-slate-950 font-bold gap-2 px-5 shadow-lg shadow-emerald-500/15"
-          >
-            <Plus className="w-5 h-5 text-slate-950" />
-            أمر تشغيل سريع
-          </Button>
-        </div>
+        <Button
+          onClick={() => setShowNewOrderModal(true)}
+          className="bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 text-slate-950 font-bold gap-2 px-5"
+        >
+          <Plus className="w-5 h-5 text-slate-950" />
+          أمر تشغيل جديد
+        </Button>
       </header>
 
-      {/* METRICS CARDS */}
-      <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-        <Card className="bg-slate-900/60 border-slate-800 backdrop-blur-lg">
-          <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
-            <CardTitle className="text-sm font-semibold text-slate-400">السيارات بالخارج الآن</CardTitle>
-            <div className="p-2 rounded-lg border border-red-500/20 bg-red-500/10 text-red-400">
-              <Car className="h-5 w-5" />
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-extrabold tracking-tight">{activeVehiclesCount}</div>
-            <p className="text-xs text-slate-500 mt-1">سيارات قيد التشغيل في الشارع حالياً</p>
-          </CardContent>
-        </Card>
+      {/* FILTER & SEARCH */}
+      <section className="grid grid-cols-1 md:grid-cols-3 gap-4 bg-slate-900/40 p-4 rounded-2xl border border-slate-800/80">
+        <div className="relative">
+          <Search className="absolute right-3 top-3 w-4 h-4 text-slate-500" />
+          <input
+            type="text"
+            placeholder="البحث باسم العميل أو السيارة أو اللوحة..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="w-full bg-slate-950 border border-slate-850 rounded-xl pr-10 pl-4 py-2.5 text-xs text-slate-200 focus:outline-none focus:ring-1 focus:ring-emerald-500 placeholder:text-slate-650"
+          />
+        </div>
 
-        <Card className="bg-slate-900/60 border-slate-800 backdrop-blur-lg">
-          <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
-            <CardTitle className="text-sm font-semibold text-slate-400">السيارات المتاحة بالجراج</CardTitle>
-            <div className="p-2 rounded-lg border border-emerald-500/20 bg-emerald-500/10 text-emerald-400">
-              <CheckCircle2 className="h-5 w-5" />
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-extrabold tracking-tight">{availableVehiclesCount}</div>
-            <p className="text-xs text-slate-500 mt-1">جاهزة ومعدة للتسليم الفوري للعملاء</p>
-          </CardContent>
-        </Card>
-
-        <Card className="bg-slate-900/60 border-slate-800 backdrop-blur-lg">
-          <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
-            <CardTitle className="text-sm font-semibold text-slate-400">السيارات في الصيانة</CardTitle>
-            <div className="p-2 rounded-lg border border-amber-500/20 bg-amber-500/10 text-amber-400">
-              <AlertTriangle className="h-5 w-5" />
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-extrabold tracking-tight">{maintenanceVehiclesCount}</div>
-            <p className="text-xs text-slate-500 mt-1">تخضع للفحص الفني أو الصيانة الدورية</p>
-          </CardContent>
-        </Card>
-
-        <Card className="bg-slate-900/60 border-slate-800 backdrop-blur-lg">
-          <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
-            <CardTitle className="text-sm font-semibold text-slate-400">صافي الأرباح المحققة</CardTitle>
-            <div className="p-2 rounded-lg border border-teal-500/20 bg-teal-500/10 text-teal-400">
-              <DollarSign className="h-5 w-5" />
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-extrabold tracking-tight flex items-baseline gap-1">
-              {totalNetProfit.toLocaleString()}
-              <span className="text-sm font-normal text-slate-500">ر.س</span>
-            </div>
-            <p className="text-xs text-slate-500 mt-1">مجموع صافي الربح لأوامر التشغيل المغلقة</p>
-          </CardContent>
-        </Card>
+        <div className="flex items-center gap-2">
+          <Filter className="w-4 h-4 text-slate-500 shrink-0" />
+          <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
+            className="w-full bg-slate-950 border border-slate-850 rounded-xl px-3 py-2.5 text-xs text-slate-200 focus:outline-none"
+          >
+            <option value="all">كل الحالات</option>
+            <option value="active">قيد التشغيل (بالخارج)</option>
+            <option value="closed">مغلقة (في الجراج)</option>
+          </select>
+        </div>
       </section>
 
-      {/* OPERATIONS WORKFLOW */}
-      <section className="grid grid-cols-1 gap-6">
-        <Card className="bg-slate-900/50 border-slate-800">
-          <CardHeader className="border-b border-slate-800/80 pb-4">
-            <CardTitle className="text-lg font-bold flex items-center gap-2">
-              <Clock className="w-5 h-5 text-emerald-400" />
-              جدول حركة أوامر التشغيل اللحظي (Live Operations)
-            </CardTitle>
-            <CardDescription className="text-slate-400 text-xs">
-              مراقبة حركة السيارات وتحديث الأرقام لحظة بلحظة مع العملاء والموردين
-            </CardDescription>
-          </CardHeader>
-
-          <CardContent className="p-0">
-            {/* Desktop Table View */}
-            <div className="hidden md:block overflow-x-auto">
-              <table className="w-full text-right text-slate-200">
-                <thead className="bg-slate-950 text-slate-400 text-xs uppercase border-b border-slate-800">
-                  <tr>
-                    <th className="px-6 py-4">معلومات السيارة / اللوحة</th>
-                    <th className="px-6 py-4">السائق المكلف</th>
-                    <th className="px-6 py-4">العميل والجوال</th>
-                    <th className="px-6 py-4">قراءة العداد</th>
-                    <th className="px-6 py-4">الخروج / العودة</th>
-                    <th className="px-6 py-4">الحالة</th>
-                    <th className="px-6 py-4">صافي الربح</th>
-                    <th className="px-6 py-4 text-center">الإجراءات</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-800/40">
-                  {orders.map((order) => (
-                    <tr key={order.id} className="hover:bg-slate-800/20 transition-all">
-                      <td className="px-6 py-4">
-                        <div className="font-semibold text-slate-200">{order.vehicle?.model}</div>
-                        <div className="text-xs text-emerald-400 mt-0.5">{order.vehicle?.plate_number}</div>
-                      </td>
-                      <td className="px-6 py-4 text-slate-300">{order.driver?.name}</td>
-                      <td className="px-6 py-4">
-                        <div className="text-slate-200 font-medium">{order.customer_name}</div>
-                        <div className="text-xs text-slate-400">{order.customer_phone}</div>
-                      </td>
-                      <td className="px-6 py-4 text-xs text-slate-400">
-                        <div>خروج: {order.out_mileage} كم</div>
-                        {order.return_mileage && <div>عودة: {order.return_mileage} كم</div>}
-                      </td>
-                      <td className="px-6 py-4 text-xs text-slate-400">
-                        <div>متوقع عودة: {new Date(order.expected_return_date).toLocaleDateString('ar-EG')}</div>
-                        {order.actual_return_date && (
-                          <div className="text-emerald-500">فعلي: {new Date(order.actual_return_date).toLocaleDateString('ar-EG')}</div>
-                        )}
-                      </td>
-                      <td className="px-6 py-4">
-                        {order.status === 'active' && (
-                          <Badge variant="outline" className="bg-red-500/10 text-red-400 border-red-500/30">
-                            بالخارج الآن
-                          </Badge>
-                        )}
-                        {order.status === 'closed' && (
-                          <Badge variant="outline" className="bg-emerald-500/10 text-emerald-400 border-emerald-500/30">
-                            في الجراج (مغلق)
-                          </Badge>
-                        )}
-                      </td>
-                      <td className="px-6 py-4 font-bold text-slate-200">
-                        {order.status === 'closed' ? `${order.net_profit} ر.س` : '—'}
-                      </td>
-                      <td className="px-6 py-4 text-center">
-                        {order.status === 'active' && (
-                          <Button
-                            onClick={() => handleOpenSettleModal(order)}
-                            size="sm"
-                            className="bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500 hover:text-slate-950 border border-emerald-500/20"
-                          >
-                            إغلاق وتسوية مالية
-                          </Button>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-
-            {/* Mobile Card List View */}
-            <div className="grid grid-cols-1 md:hidden gap-4 p-4">
-              {orders.map((order) => (
-                <div key={order.id} className="bg-slate-950/60 p-4 rounded-xl border border-slate-800 flex flex-col gap-3">
-                  <div className="flex justify-between items-start border-b border-slate-800 pb-2">
-                    <div>
-                      <div className="font-semibold text-slate-200 text-sm">{order.vehicle?.model}</div>
-                      <div className="text-xs text-emerald-400 mt-0.5">{order.vehicle?.plate_number}</div>
-                    </div>
-                    {order.status === 'active' ? (
-                      <Badge variant="outline" className="bg-red-500/10 text-red-400 border-red-500/30">
-                        بالخارج
-                      </Badge>
-                    ) : (
-                      <Badge variant="outline" className="bg-emerald-500/10 text-emerald-400 border-emerald-500/30">
-                        مغلق
-                      </Badge>
-                    )}
-                  </div>
-
-                  <div className="flex items-center gap-2 text-xs text-slate-300">
-                    <User className="w-3.5 h-3.5 text-slate-500" />
-                    <span>السائق: {order.driver?.name}</span>
-                  </div>
-
-                  <div className="flex items-center gap-2 text-xs text-slate-300">
-                    <TrendingUp className="w-3.5 h-3.5 text-slate-500" />
-                    <span>العميل: {order.customer_name} ({order.customer_phone})</span>
-                  </div>
-
-                  <div className="flex items-center gap-2 text-xs text-slate-400 bg-slate-900 p-2 rounded-lg justify-between">
-                    <div>عداد الخروج: {order.out_mileage} كم</div>
-                    {order.return_mileage && <div>عداد العودة: {order.return_mileage} كم</div>}
-                  </div>
-
-                  {order.status === 'closed' && (
-                    <div className="flex justify-between items-center border-t border-slate-900 pt-2 text-xs text-slate-400">
-                      <span>صافي أرباح المكتب:</span>
-                      <span className="font-bold text-emerald-400 text-sm">{order.net_profit} ر.س</span>
-                    </div>
-                  )}
-
-                  {order.status === 'active' && (
-                    <Button
-                      onClick={() => handleOpenSettleModal(order)}
-                      size="sm"
-                      className="w-full bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold py-2 mt-2"
-                    >
-                      إغلاق وتسوية مالية
-                    </Button>
+      {/* ORDERS LIST */}
+      <section className="flex flex-col gap-4">
+        {filteredOrders.map((order) => (
+          <Card key={order.id} className="bg-slate-900/60 border-slate-800 hover:border-slate-705 transition-all overflow-hidden">
+            <div className="p-6 grid grid-cols-1 lg:grid-cols-4 gap-6">
+              {/* Vehicle & Status info */}
+              <div className="flex flex-col gap-2">
+                <div className="flex items-center gap-2">
+                  <Car className="w-4 h-4 text-emerald-400" />
+                  <span className="font-bold text-slate-200">{order.vehicle?.model}</span>
+                </div>
+                <div className="text-xs text-slate-400">رقم اللوحة: <strong className="text-emerald-400">{order.vehicle?.plate_number}</strong></div>
+                <div className="mt-2">
+                  {order.status === 'active' ? (
+                    <Badge variant="outline" className="bg-red-500/10 text-red-400 border-red-500/25">نشط (بالخارج)</Badge>
+                  ) : (
+                    <Badge variant="outline" className="bg-emerald-500/10 text-emerald-400 border-emerald-500/25">مغلق وتسوية كاملة</Badge>
                   )}
                 </div>
-              ))}
+              </div>
+
+              {/* Driver & Customer info */}
+              <div className="flex flex-col gap-1.5 text-xs">
+                <div className="text-slate-500">العميل والجوال:</div>
+                <div className="font-bold text-slate-300">{order.customer_name} ({order.customer_phone})</div>
+                <div className="text-slate-500 mt-2">السائق المكلف:</div>
+                <div className="font-bold text-slate-300 flex items-center gap-1">
+                  <User className="w-3.5 h-3.5 text-slate-500" />
+                  {order.driver?.name}
+                </div>
+              </div>
+
+              {/* Mileage & Dates */}
+              <div className="flex flex-col gap-1 text-xs text-slate-400">
+                <div className="flex justify-between">
+                  <span>عداد الخروج:</span>
+                  <span className="font-bold text-slate-300">{order.out_mileage} كم</span>
+                </div>
+                {order.return_mileage && (
+                  <div className="flex justify-between">
+                    <span>عداد العودة:</span>
+                    <span className="font-bold text-slate-355">{order.return_mileage} كم</span>
+                  </div>
+                )}
+                <div className="flex justify-between border-t border-slate-800/80 pt-1.5 mt-1.5">
+                  <span>تاريخ الخروج:</span>
+                  <span>{new Date(order.expected_out_date).toLocaleDateString('ar-EG')}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>تاريخ العودة:</span>
+                  <span>{new Date(order.expected_return_date).toLocaleDateString('ar-EG')}</span>
+                </div>
+              </div>
+
+              {/* Settle Operations & Profit */}
+              <div className="flex flex-col justify-between items-end border-r border-slate-800/80 pr-6">
+                <div className="text-left w-full">
+                  <span className="text-xs text-slate-500 block">صافي ربح الرحلة:</span>
+                  <span className="text-xl font-black text-emerald-400 mt-1 block">
+                    {order.status === 'closed' ? `${order.net_profit} ر.س` : 'قيد التشغيل...'}
+                  </span>
+                </div>
+
+                {order.status === 'active' && (
+                  <Button
+                    onClick={() => handleOpenSettleModal(order)}
+                    size="sm"
+                    className="bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold gap-1 mt-4"
+                  >
+                    <ArrowRightLeft className="w-4 h-4" />
+                    تسوية وإغلاق العداد
+                  </Button>
+                )}
+              </div>
             </div>
-          </CardContent>
-        </Card>
+          </Card>
+        ))}
       </section>
 
-      {/* NEW ORDER DRAWER / MODAL */}
+      {/* NEW ORDER MODAL */}
       {showNewOrderModal && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <Card className="w-full max-w-md bg-slate-900 border-slate-800 shadow-2xl relative">
@@ -636,11 +497,11 @@ export default function Dashboard() {
             </button>
             <CardHeader>
               <CardTitle className="text-xl font-bold flex items-center gap-2">
-                <Car className="w-5 h-5 text-emerald-400" />
-                أمر تشغيل سريع للسيارة
+                <Plus className="w-5 h-5 text-emerald-400" />
+                إنشاء أمر حركة وتشغيل
               </CardTitle>
               <CardDescription className="text-slate-400">
-                تسجيل فوري لخروج السيارة وتسليمها للسائق والعميل
+                تسجيل بيانات خروج سيارة بالعداد وتعيين السائق والعميل
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -680,10 +541,10 @@ export default function Dashboard() {
                   <input
                     required
                     type="text"
-                    placeholder="مثال: خالد العتيبي"
+                    placeholder="اسم العميل"
                     value={newOrder.customer_name}
                     onChange={(e) => setNewOrder(prev => ({ ...prev, customer_name: e.target.value }))}
-                    className="bg-slate-950 border border-slate-850 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:ring-1 focus:ring-emerald-500 placeholder:text-slate-600"
+                    className="bg-slate-950 border border-slate-850 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:ring-1 focus:ring-emerald-500 placeholder:text-slate-700"
                   />
                 </div>
 
@@ -692,22 +553,22 @@ export default function Dashboard() {
                   <input
                     required
                     type="tel"
-                    placeholder="05xxxxxxx"
+                    placeholder="05xxxxxxxx"
                     value={newOrder.customer_phone}
                     onChange={(e) => setNewOrder(prev => ({ ...prev, customer_phone: e.target.value }))}
-                    className="bg-slate-950 border border-slate-850 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:ring-1 focus:ring-emerald-500 placeholder:text-slate-600 text-left"
+                    className="bg-slate-950 border border-slate-850 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:ring-1 focus:ring-emerald-500 placeholder:text-slate-700 text-left"
                     style={{ direction: 'ltr' }}
                   />
                 </div>
 
                 <div className="grid grid-cols-2 gap-3">
                   <div className="flex flex-col gap-1.5">
-                    <label className="text-xs text-slate-400 font-semibold">عداد الخروج الحالي</label>
+                    <label className="text-xs text-slate-400 font-semibold">عداد الخروج الفعلي (كم)</label>
                     <input
                       readOnly
                       type="number"
                       value={newOrder.out_mileage}
-                      className="bg-slate-950/60 border border-slate-850 rounded-lg px-3 py-2 text-sm text-slate-400 focus:outline-none"
+                      className="bg-slate-950/60 border border-slate-850 rounded-lg px-3 py-2 text-sm text-slate-450"
                     />
                   </div>
 
@@ -718,13 +579,13 @@ export default function Dashboard() {
                       type="datetime-local"
                       value={newOrder.expected_return_date}
                       onChange={(e) => setNewOrder(prev => ({ ...prev, expected_return_date: e.target.value }))}
-                      className="bg-slate-950 border border-slate-850 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                      className="bg-slate-950 border border-slate-850 rounded-lg px-3 py-2 text-sm text-slate-250 focus:outline-none"
                     />
                   </div>
                 </div>
 
                 <Button type="submit" className="w-full bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold py-2.5 mt-2">
-                  تأكيد الخروج وتسجيل الإذن
+                  تأكيد الخروج وبدء الرحلة
                 </Button>
               </form>
             </CardContent>
@@ -748,10 +609,10 @@ export default function Dashboard() {
             <CardHeader>
               <CardTitle className="text-xl font-bold flex items-center gap-2">
                 <ArrowRightLeft className="w-5 h-5 text-emerald-400" />
-                إغلاق وتسوية مالية لأمر التشغيل
+                إغلاق وتسوية أمر التشغيل
               </CardTitle>
               <CardDescription className="text-slate-400">
-                أدخل قراءات عداد العودة، والمصروفات، والمبالغ المستلمة
+                تسجيل قراءة عداد العودة، والمبالغ، والمصاريف النثرية للرحلة
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -765,19 +626,19 @@ export default function Dashboard() {
                       min={selectedOrderToSettle.out_mileage}
                       value={settlement.return_mileage}
                       onChange={(e) => setSettlement(prev => ({ ...prev, return_mileage: parseInt(e.target.value) || 0 }))}
-                      className="bg-slate-950 border border-slate-850 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                      className="bg-slate-950 border border-slate-850 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none"
                     />
                   </div>
 
                   <div className="flex flex-col gap-1.5">
-                    <label className="text-xs text-slate-400 font-semibold">المبلغ المستلم من العميل</label>
+                    <label className="text-xs text-slate-400 font-semibold">المبلغ المستلم من العميل (ر.س)</label>
                     <input
                       required
                       type="number"
                       min="0"
                       value={settlement.amount_received}
                       onChange={(e) => setSettlement(prev => ({ ...prev, amount_received: parseFloat(e.target.value) || 0 }))}
-                      className="bg-slate-950 border border-slate-850 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                      className="bg-slate-950 border border-slate-850 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none"
                     />
                   </div>
                 </div>
@@ -789,13 +650,13 @@ export default function Dashboard() {
                     min="0"
                     value={settlement.amount_paid_supplier}
                     onChange={(e) => setSettlement(prev => ({ ...prev, amount_paid_supplier: parseFloat(e.target.value) || 0 }))}
-                    className="bg-slate-950 border border-slate-850 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                    className="bg-slate-950 border border-slate-850 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none"
                   />
                 </div>
 
                 {/* EXPENSES SUB-SECTION */}
                 <div className="border-t border-slate-800 pt-3">
-                  <label className="text-sm font-bold text-slate-300 block mb-2">المصاريف النثرية أثناء الرحلة</label>
+                  <label className="text-sm font-bold text-slate-305 block mb-2">المصاريف النثرية للرحلة (بنزين، كارتة...)</label>
 
                   <div className="grid grid-cols-3 gap-2 items-end mb-3">
                     <div className="flex flex-col gap-1">
@@ -809,7 +670,7 @@ export default function Dashboard() {
                         className="bg-slate-950 border border-slate-850 rounded px-2 py-1 text-xs text-slate-200 focus:outline-none"
                       >
                         <option value="fuel">وقود</option>
-                        <option value="toll">كارتة / طريق</option>
+                        <option value="toll">طريق / كارتة</option>
                         <option value="parking">مواقف</option>
                         <option value="cleaning">غسيل</option>
                         <option value="other">أخرى</option>
@@ -817,7 +678,7 @@ export default function Dashboard() {
                     </div>
 
                     <div className="flex flex-col gap-1">
-                      <span className="text-[10px] text-slate-400">القيمة (ر.س)</span>
+                      <span className="text-[10px] text-slate-400">المبلغ</span>
                       <input
                         type="number"
                         min="0"
@@ -836,7 +697,7 @@ export default function Dashboard() {
                       size="sm"
                       className="bg-slate-800 hover:bg-slate-750 text-slate-200 text-xs h-8"
                     >
-                      أضف مصروف
+                      أضف
                     </Button>
                   </div>
 
@@ -860,7 +721,7 @@ export default function Dashboard() {
 
                 <div className="bg-slate-950/60 p-3 rounded-lg border border-slate-850 text-sm flex justify-between items-center font-bold mt-2">
                   <span>صافي ربح المكتب المتوقع:</span>
-                  <span className="text-emerald-400">
+                  <span className="text-emerald-400 font-black">
                     {(
                       settlement.amount_received -
                       settlement.amount_paid_supplier -
@@ -871,7 +732,7 @@ export default function Dashboard() {
                 </div>
 
                 <Button type="submit" className="w-full bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold py-2.5 mt-2">
-                  تسوية وإغلاق الطلب نهائياً
+                  إغلاق وتسوية الرحلة
                 </Button>
               </form>
             </CardContent>
