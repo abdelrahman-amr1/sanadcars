@@ -12,6 +12,7 @@ interface TenantContextType {
   user: User | null;
   tenant: Tenant | null;
   isDemoMode: boolean;
+  isSuperAdmin: boolean;
   loading: boolean;
   needsOnboarding: boolean;
   toggleDemoMode: () => void;
@@ -188,12 +189,15 @@ export function TenantProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const isSuperAdmin = user?.email === 'abdelrahman.amr@gmail.com';
+
   return (
     <TenantContext.Provider
       value={{
         user,
         tenant,
         isDemoMode,
+        isSuperAdmin,
         loading,
         needsOnboarding,
         toggleDemoMode,

@@ -14,7 +14,8 @@ import {
   LogOut,
   LogIn,
   ChevronLeft,
-  Menu
+  Menu,
+  ShieldCheck
 } from 'lucide-react';
 import { useState } from 'react';
 
@@ -123,6 +124,25 @@ export function Sidebar() {
                 </Link>
               );
             })}
+            
+            {/* Super Admin Panel Link */}
+            {isSuperAdmin && (
+              <Link
+                href="/admin"
+                className={cn(
+                  "flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all group relative mt-4 border border-rose-500/10 bg-rose-500/5 text-rose-450 hover:bg-rose-500/10",
+                  pathname === '/admin' && "bg-rose-500/10 border-rose-500/20 text-rose-400"
+                )}
+              >
+                <ShieldCheck className="w-5 h-5 shrink-0 text-rose-450" />
+                {isOpen && <span>لوحة السوبر أدمن</span>}
+                {!isOpen && (
+                  <div className="absolute right-full mr-3 bg-slate-950 text-slate-200 text-xs px-2.5 py-1.5 rounded-md opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity duration-200 shadow-xl border border-slate-800 z-50 whitespace-nowrap">
+                    لوحة السوبر أدمن
+                  </div>
+                )}
+              </Link>
+            )}
           </nav>
         </div>
 
