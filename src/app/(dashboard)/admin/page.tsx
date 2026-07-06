@@ -111,7 +111,7 @@ export default function SuperAdminPage() {
       // Automatically add the owner to tenant_members
       const { error: mError } = await supabase
         .from('tenant_members')
-        .insert({
+        .upsert({
           tenant_id: createdTenant.id,
           user_id: newTenant.owner_id,
           role: 'owner'
@@ -139,7 +139,7 @@ export default function SuperAdminPage() {
     try {
       const { error } = await supabase
         .from('tenant_members')
-        .insert({
+        .upsert({
           tenant_id: newMember.tenant_id,
           user_id: newMember.user_id,
           role: newMember.role
