@@ -32,7 +32,7 @@ export function Sidebar() {
   const pathname = usePathname();
   const router = useRouter();
   const [isOpen, setIsOpen] = useState(true);
-  const { user, tenant, isDemoMode, logout } = useTenant();
+  const { user, tenant, isDemoMode, isSuperAdmin, logout } = useTenant();
 
   const handleAuthAction = () => {
     if (user) {
