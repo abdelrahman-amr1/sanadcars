@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -120,11 +120,16 @@ const mockOrders: OperationOrder[] = [
   }
 ];
 
+import { useTenant } from '@/lib/context/TenantContext';
+import { useRouter } from 'next/navigation';
+
 export default function Dashboard() {
+  const { tenant, isDemoMode } = useTenant();
+  const router = useRouter();
+
   const [vehicles, setVehicles] = useState<Vehicle[]>(mockVehicles);
   const [drivers, setDrivers] = useState<Driver[]>(mockDrivers);
   const [orders, setOrders] = useState<OperationOrder[]>(mockOrders);
-  const [isUsingMock, setIsUsingMock] = useState(true);
 
   // Forms states
   const [showNewOrderModal, setShowNewOrderModal] = useState(false);
@@ -150,56 +155,32 @@ export default function Dashboard() {
     newExpense: { category: 'fuel' as Expense['category'], amount: 0, description: '' }
   });
 
-  // Try to connect to Supabase and load live data
-  useEffect(() => {
-    async function checkSupabaseConnection() {
-      try {
-        const { data: vData, error: vError } = await supabase.from('vehicles').select('*').limit(1);
-        if (!vError) {
-          setIsUsingMock(false);
-          loadLiveSupabaseData();
-        }
-      } catch {
-        setIsUsingMock(true);
-      }
+  // Sync Demo Mode changes at render time
+  const [prevDemoMode, setPrevDemoMode] = useState(isDemoMode);
+  if (isDemoMode !== prevDemoMode) {
+    setPrevDemoMode(isDemoMode);
+    if (isDemoMode) {
+      setVehicles(mockVehicles);
+      setDrivers(mockDrivers);
+      setOrders(mockOrders);
     }
+  }
 
-    checkSupabaseConnection();
-  }, []);
-
-  // Realtime updates subscription
-  useEffect(() => {
-    if (isUsingMock) return;
-
-    const channel = supabase
-      .channel('operations_sync_dash')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'operation_orders' }, () => {
-        loadLiveSupabaseData();
-      })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'vehicles' }, () => {
-        loadLiveSupabaseData();
-      })
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [isUsingMock]);
-
-  const loadLiveSupabaseData = async () => {
-    const { data: vData } = await supabase.from('vehicles').select('*');
-    const { data: dData } = await supabase.from('drivers').select('*');
+  const loadLiveSupabaseData = useCallback(async () => {
+    if (!tenant) return;
+    const { data: vData } = await supabase.from('vehicles').select('*').eq('tenant_id', tenant.id);
+    const { data: dData } = await supabase.from('drivers').select('*').eq('tenant_id', tenant.id);
     const { data: oData } = await supabase.from('operation_orders').select(`
       *,
       vehicle:vehicles(*),
       driver:drivers(*)
-    `).order('created_at', { ascending: false });
+    `).eq('tenant_id', tenant.id).order('created_at', { ascending: false });
 
     if (vData) setVehicles(vData as Vehicle[]);
     if (dData) setDrivers(dData as Driver[]);
     if (oData) {
       const ordersWithExpenses = await Promise.all(
-        oData.map(async (order: any) => {
+        oData.map(async (order: { id: string }) => {
           const { data: expData } = await supabase
             .from('expenses')
             .select('*')
@@ -212,7 +193,33 @@ export default function Dashboard() {
       );
       setOrders(ordersWithExpenses as OperationOrder[]);
     }
-  };
+  }, [tenant]);
+
+  // Load data depending on mode
+  useEffect(() => {
+    if (!isDemoMode && tenant) {
+      loadLiveSupabaseData();
+    }
+  }, [isDemoMode, tenant, loadLiveSupabaseData]);
+
+  // Realtime updates subscription
+  useEffect(() => {
+    if (isDemoMode || !tenant) return;
+
+    const channel = supabase
+      .channel('operations_sync_dash')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'operation_orders', filter: `tenant_id=eq.${tenant.id}` }, () => {
+        loadLiveSupabaseData();
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'vehicles', filter: `tenant_id=eq.${tenant.id}` }, () => {
+        loadLiveSupabaseData();
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [isDemoMode, tenant, loadLiveSupabaseData]);
 
   // Metrics calculations
   const activeVehiclesCount = vehicles.filter(v => v.status === 'in_operation').length;
@@ -234,7 +241,7 @@ export default function Dashboard() {
 
   const handleCreateOrder = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (isUsingMock) {
+    if (isDemoMode) {
       const newId = `o_${Date.now()}`;
       const selectedVehicle = vehicles.find(v => v.id === newOrder.vehicle_id);
       const selectedDriver = drivers.find(d => d.id === newOrder.driver_id);
@@ -262,16 +269,9 @@ export default function Dashboard() {
       setDrivers(prev => prev.map(d => d.id === newOrder.driver_id ? { ...d, status: 'in_operation' } : d));
       setOrders(prev => [created, ...prev]);
     } else {
-      const { data: { user } } = await supabase.auth.getUser();
-      const { data: member } = await supabase
-        .from('tenant_members')
-        .select('tenant_id')
-        .eq('user_id', user?.id)
-        .single();
-
-      if (member) {
+      if (tenant) {
         await supabase.from('operation_orders').insert({
-          tenant_id: member.tenant_id,
+          tenant_id: tenant.id,
           vehicle_id: newOrder.vehicle_id,
           driver_id: newOrder.driver_id,
           customer_name: newOrder.customer_name,
@@ -282,6 +282,12 @@ export default function Dashboard() {
           out_mileage: newOrder.out_mileage,
           status: 'active'
         });
+
+        // Update vehicle and driver status
+        await supabase.from('vehicles').update({ status: 'in_operation' }).eq('id', newOrder.vehicle_id);
+        await supabase.from('drivers').update({ status: 'in_operation' }).eq('id', newOrder.driver_id);
+
+        loadLiveSupabaseData();
       }
     }
 
@@ -332,7 +338,7 @@ export default function Dashboard() {
     const totalExpenses = settlement.expenses.reduce((sum, exp) => sum + exp.amount, 0);
     const profit = settlement.amount_received - settlement.amount_paid_supplier - totalExpenses;
 
-    if (isUsingMock) {
+    if (isDemoMode) {
       setOrders(prev => prev.map(o => {
         if (o.id === selectedOrderToSettle.id) {
           return {
@@ -352,24 +358,28 @@ export default function Dashboard() {
       setVehicles(prev => prev.map(v => v.id === selectedOrderToSettle.vehicle_id ? { ...v, status: 'available', current_mileage: settlement.return_mileage } : v));
       setDrivers(prev => prev.map(d => d.id === selectedOrderToSettle.driver_id ? { ...d, status: 'active' } : d));
     } else {
-      await supabase.from('operation_orders').update({
-        status: 'closed',
-        actual_return_date: new Date().toISOString(),
-        return_mileage: settlement.return_mileage,
-        amount_received_from_customer: settlement.amount_received,
-        amount_paid_to_external_supplier: settlement.amount_paid_supplier,
-      }).eq('id', selectedOrderToSettle.id);
+      if (tenant) {
+        await supabase.from('operation_orders').update({
+          status: 'closed',
+          actual_return_date: new Date().toISOString(),
+          return_mileage: settlement.return_mileage,
+          amount_received_from_customer: settlement.amount_received,
+          amount_paid_to_external_supplier: settlement.amount_paid_supplier,
+          net_profit: profit
+        }).eq('id', selectedOrderToSettle.id);
 
-      if (settlement.expenses.length > 0) {
-        const { data: member } = await supabase
-          .from('tenant_members')
-          .select('tenant_id')
-          .limit(1)
-          .single();
+        await supabase.from('vehicles').update({ 
+          status: 'available', 
+          current_mileage: settlement.return_mileage 
+        }).eq('id', selectedOrderToSettle.vehicle_id);
 
-        if (member) {
+        await supabase.from('drivers').update({ 
+          status: 'active' 
+        }).eq('id', selectedOrderToSettle.driver_id);
+
+        if (settlement.expenses.length > 0) {
           const insertPayload = settlement.expenses.map(exp => ({
-            tenant_id: member.tenant_id,
+            tenant_id: tenant.id,
             order_id: selectedOrderToSettle.id,
             amount: exp.amount,
             category: exp.category,
@@ -377,6 +387,8 @@ export default function Dashboard() {
           }));
           await supabase.from('expenses').insert(insertPayload);
         }
+
+        loadLiveSupabaseData();
       }
     }
 
@@ -386,6 +398,30 @@ export default function Dashboard() {
 
   return (
     <div className="flex flex-col gap-6">
+      {/* Demo Mode floating ribbon */}
+      {isDemoMode && (
+        <div className="bg-gradient-to-r from-amber-500/10 via-amber-500/20 to-amber-500/10 border border-amber-500/25 rounded-2xl p-4 flex flex-col md:flex-row justify-between items-center gap-4 shadow-xl backdrop-blur-md">
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-amber-500/20 text-amber-400 rounded-lg animate-pulse shrink-0">
+              <AlertCircle className="w-5 h-5" />
+            </div>
+            <div className="text-right">
+              <h4 className="font-bold text-slate-100 text-sm">أنت تتصفح وضع المعاينة (Sandbox Mode)</h4>
+              <p className="text-xs text-slate-400 mt-0.5">
+                البيانات المعروضة حالياً هي بيانات محاكاة تجريبية. يمكنك تسجيل حساب وربط قاعدة بيانات سحابية حية لبدء التشغيل الفعلي.
+              </p>
+            </div>
+          </div>
+          <Button
+            onClick={() => router.push('/signup')}
+            className="bg-amber-450 hover:bg-amber-550 text-slate-950 font-bold px-4 py-2 text-xs rounded-xl shadow-lg shadow-amber-400/10 shrink-0"
+          >
+            <Plus className="w-4 h-4 ml-1.5 text-slate-950" />
+            ربط قاعدة بيانات حية / إنشاء حساب
+          </Button>
+        </div>
+      )}
+
       <header className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
           <h2 className="text-2xl font-black text-slate-100 flex items-center gap-2">
@@ -396,7 +432,7 @@ export default function Dashboard() {
         </div>
 
         <div className="flex items-center gap-3 w-full md:w-auto">
-          {isUsingMock && (
+          {isDemoMode && (
             <Badge variant="outline" className="bg-amber-500/10 text-amber-400 border-amber-500/30 gap-1 px-3 py-1 flex items-center">
               <AlertCircle className="w-3.5 h-3.5" />
               بيانات محاكاة نشطة

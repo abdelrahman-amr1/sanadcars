@@ -1,7 +1,8 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase/client';
+import { useTenant } from '@/lib/context/TenantContext';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -12,10 +13,7 @@ import {
   X,
   Car,
   Calendar,
-  DollarSign,
   AlertTriangle,
-  CheckCircle,
-  HelpCircle,
   Tag
 } from 'lucide-react';
 
@@ -66,9 +64,9 @@ const mockViolations: Violation[] = [
 ];
 
 export default function ViolationsPage() {
+  const { tenant, isDemoMode } = useTenant();
   const [vehicles, setVehicles] = useState<Vehicle[]>(mockVehicles);
   const [violations, setViolations] = useState<Violation[]>(mockViolations);
-  const [isUsingMock, setIsUsingMock] = useState(true);
   const [showAddModal, setShowAddModal] = useState(false);
   const [search, setSearch] = useState('');
 
@@ -81,35 +79,37 @@ export default function ViolationsPage() {
     status: 'pending' as Violation['status']
   });
 
-  useEffect(() => {
-    async function checkSupabase() {
-      try {
-        const { data, error } = await supabase.from('traffic_violations').select('*');
-        if (!error && data) {
-          setIsUsingMock(false);
-          loadData();
-        }
-      } catch {
-        setIsUsingMock(true);
-      }
+  // Sync Demo Mode changes at render time
+  const [prevDemoMode, setPrevDemoMode] = useState(isDemoMode);
+  if (isDemoMode !== prevDemoMode) {
+    setPrevDemoMode(isDemoMode);
+    if (isDemoMode) {
+      setVehicles(mockVehicles);
+      setViolations(mockViolations);
     }
-    checkSupabase();
-  }, []);
+  }
 
-  const loadData = async () => {
-    const { data: vData } = await supabase.from('vehicles').select('id, plate_number, model');
+  const loadData = useCallback(async () => {
+    if (!tenant) return;
+    const { data: vData } = await supabase.from('vehicles').select('id, plate_number, model').eq('tenant_id', tenant.id);
     const { data: viData } = await supabase.from('traffic_violations').select(`
       *,
       vehicle:vehicles(id, plate_number, model)
-    `).order('created_at', { ascending: false });
+    `).eq('tenant_id', tenant.id).order('created_at', { ascending: false });
 
     if (vData) setVehicles(vData as Vehicle[]);
     if (viData) setViolations(viData as Violation[]);
-  };
+  }, [tenant]);
+
+  useEffect(() => {
+    if (!isDemoMode && tenant) {
+      loadData();
+    }
+  }, [isDemoMode, tenant, loadData]);
 
   const handleAddViolation = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (isUsingMock) {
+    if (isDemoMode) {
       const selectedVehicle = vehicles.find(v => v.id === newViolation.vehicle_id);
       const added: Violation = {
         id: `vi_${Date.now()}`,
@@ -123,10 +123,9 @@ export default function ViolationsPage() {
       };
       setViolations(prev => [added, ...prev]);
     } else {
-      const { data: member } = await supabase.from('tenant_members').select('tenant_id').limit(1).single();
-      if (member) {
+      if (tenant) {
         await supabase.from('traffic_violations').insert({
-          tenant_id: member.tenant_id,
+          tenant_id: tenant.id,
           violation_number: newViolation.violation_number,
           amount: newViolation.amount,
           violation_date: new Date(newViolation.violation_date).toISOString(),
@@ -150,11 +149,13 @@ export default function ViolationsPage() {
   };
 
   const handlePayViolation = async (id: string) => {
-    if (isUsingMock) {
+    if (isDemoMode) {
       setViolations(prev => prev.map(vi => vi.id === id ? { ...vi, status: 'paid' } : vi));
     } else {
-      await supabase.from('traffic_violations').update({ status: 'paid' }).eq('id', id);
-      loadData();
+      if (tenant) {
+        await supabase.from('traffic_violations').update({ status: 'paid' }).eq('id', id).eq('tenant_id', tenant.id);
+        loadData();
+      }
     }
   };
 

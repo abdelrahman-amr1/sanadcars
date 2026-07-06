@@ -1,7 +1,8 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase/client';
+import { useTenant } from '@/lib/context/TenantContext';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -36,8 +37,8 @@ const mockDrivers: Driver[] = [
 ];
 
 export default function DriversPage() {
+  const { tenant, isDemoMode } = useTenant();
   const [drivers, setDrivers] = useState<Driver[]>(mockDrivers);
-  const [isUsingMock, setIsUsingMock] = useState(true);
   const [showAddModal, setShowAddModal] = useState(false);
   const [search, setSearch] = useState('');
 
@@ -49,29 +50,30 @@ export default function DriversPage() {
     status: 'active' as Driver['status']
   });
 
-  useEffect(() => {
-    async function checkSupabase() {
-      try {
-        const { data, error } = await supabase.from('drivers').select('*');
-        if (!error && data) {
-          setDrivers(data as Driver[]);
-          setIsUsingMock(false);
-        }
-      } catch {
-        setIsUsingMock(true);
-      }
+  // Sync Demo Mode changes at render time
+  const [prevDemoMode, setPrevDemoMode] = useState(isDemoMode);
+  if (isDemoMode !== prevDemoMode) {
+    setPrevDemoMode(isDemoMode);
+    if (isDemoMode) {
+      setDrivers(mockDrivers);
     }
-    checkSupabase();
-  }, []);
+  }
 
-  const loadData = async () => {
-    const { data } = await supabase.from('drivers').select('*');
+  const loadData = useCallback(async () => {
+    if (!tenant) return;
+    const { data } = await supabase.from('drivers').select('*').eq('tenant_id', tenant.id);
     if (data) setDrivers(data as Driver[]);
-  };
+  }, [tenant]);
+
+  useEffect(() => {
+    if (!isDemoMode && tenant) {
+      loadData();
+    }
+  }, [isDemoMode, tenant, loadData]);
 
   const handleAddDriver = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (isUsingMock) {
+    if (isDemoMode) {
       const added: Driver = {
         id: `d_${Date.now()}`,
         name: newDriver.name,
@@ -82,10 +84,9 @@ export default function DriversPage() {
       };
       setDrivers(prev => [added, ...prev]);
     } else {
-      const { data: member } = await supabase.from('tenant_members').select('tenant_id').limit(1).single();
-      if (member) {
+      if (tenant) {
         await supabase.from('drivers').insert({
-          tenant_id: member.tenant_id,
+          tenant_id: tenant.id,
           name: newDriver.name,
           license_number: newDriver.license_number,
           license_expiry: newDriver.license_expiry,

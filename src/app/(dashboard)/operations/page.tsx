@@ -1,7 +1,8 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase/client';
+import { useTenant } from '@/lib/context/TenantContext';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -123,10 +124,10 @@ const mockOrders: OperationOrder[] = [
 ];
 
 export default function OperationsPage() {
+  const { tenant, isDemoMode } = useTenant();
   const [vehicles, setVehicles] = useState<Vehicle[]>(mockVehicles);
   const [drivers, setDrivers] = useState<Driver[]>(mockDrivers);
   const [orders, setOrders] = useState<OperationOrder[]>(mockOrders);
-  const [isUsingMock, setIsUsingMock] = useState(true);
 
   // Modal controls
   const [showNewOrderModal, setShowNewOrderModal] = useState(false);
@@ -157,35 +158,32 @@ export default function OperationsPage() {
     newExpense: { category: 'fuel' as Expense['category'], amount: 0, description: '' }
   });
 
-  useEffect(() => {
-    async function checkSupabase() {
-      try {
-        const { data, error } = await supabase.from('operation_orders').select('*');
-        if (!error && data) {
-          setIsUsingMock(false);
-          loadData();
-        }
-      } catch {
-        setIsUsingMock(true);
-      }
+  // Sync Demo Mode changes at render time
+  const [prevDemoMode, setPrevDemoMode] = useState(isDemoMode);
+  if (isDemoMode !== prevDemoMode) {
+    setPrevDemoMode(isDemoMode);
+    if (isDemoMode) {
+      setVehicles(mockVehicles);
+      setDrivers(mockDrivers);
+      setOrders(mockOrders);
     }
-    checkSupabase();
-  }, []);
+  }
 
-  const loadData = async () => {
-    const { data: vData } = await supabase.from('vehicles').select('*');
-    const { data: dData } = await supabase.from('drivers').select('*');
+  const loadData = useCallback(async () => {
+    if (!tenant) return;
+    const { data: vData } = await supabase.from('vehicles').select('*').eq('tenant_id', tenant.id);
+    const { data: dData } = await supabase.from('drivers').select('*').eq('tenant_id', tenant.id);
     const { data: oData } = await supabase.from('operation_orders').select(`
       *,
       vehicle:vehicles(*),
       driver:drivers(*)
-    `).order('created_at', { ascending: false });
+    `).eq('tenant_id', tenant.id).order('created_at', { ascending: false });
 
     if (vData) setVehicles(vData as Vehicle[]);
     if (dData) setDrivers(dData as Driver[]);
     if (oData) {
       const ordersWithExpenses = await Promise.all(
-        oData.map(async (order: any) => {
+        oData.map(async (order: { id: string }) => {
           const { data: expData } = await supabase
             .from('expenses')
             .select('*')
@@ -198,7 +196,13 @@ export default function OperationsPage() {
       );
       setOrders(ordersWithExpenses as OperationOrder[]);
     }
-  };
+  }, [tenant]);
+
+  useEffect(() => {
+    if (!isDemoMode && tenant) {
+      loadData();
+    }
+  }, [isDemoMode, tenant, loadData]);
 
   const handleVehicleChange = (vId: string) => {
     const veh = vehicles.find(v => v.id === vId);
@@ -211,7 +215,7 @@ export default function OperationsPage() {
 
   const handleCreateOrder = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (isUsingMock) {
+    if (isDemoMode) {
       const selectedVehicle = vehicles.find(v => v.id === newOrder.vehicle_id);
       const selectedDriver = drivers.find(d => d.id === newOrder.driver_id);
 
@@ -238,10 +242,9 @@ export default function OperationsPage() {
       setDrivers(prev => prev.map(d => d.id === newOrder.driver_id ? { ...d, status: 'in_operation' } : d));
       setOrders(prev => [created, ...prev]);
     } else {
-      const { data: member } = await supabase.from('tenant_members').select('tenant_id').limit(1).single();
-      if (member) {
+      if (tenant) {
         await supabase.from('operation_orders').insert({
-          tenant_id: member.tenant_id,
+          tenant_id: tenant.id,
           vehicle_id: newOrder.vehicle_id,
           driver_id: newOrder.driver_id,
           customer_name: newOrder.customer_name,
@@ -252,6 +255,11 @@ export default function OperationsPage() {
           out_mileage: newOrder.out_mileage,
           status: 'active'
         });
+
+        // Update vehicle and driver status
+        await supabase.from('vehicles').update({ status: 'in_operation' }).eq('id', newOrder.vehicle_id).eq('tenant_id', tenant.id);
+        await supabase.from('drivers').update({ status: 'in_operation' }).eq('id', newOrder.driver_id).eq('tenant_id', tenant.id);
+
         loadData();
       }
     }
@@ -303,7 +311,7 @@ export default function OperationsPage() {
     const totalExpenses = settlement.expenses.reduce((sum, exp) => sum + exp.amount, 0);
     const profit = settlement.amount_received - settlement.amount_paid_supplier - totalExpenses;
 
-    if (isUsingMock) {
+    if (isDemoMode) {
       setOrders(prev => prev.map(o => {
         if (o.id === selectedOrderToSettle.id) {
           return {
@@ -323,19 +331,28 @@ export default function OperationsPage() {
       setVehicles(prev => prev.map(v => v.id === selectedOrderToSettle.vehicle_id ? { ...v, status: 'available', current_mileage: settlement.return_mileage } : v));
       setDrivers(prev => prev.map(d => d.id === selectedOrderToSettle.driver_id ? { ...d, status: 'active' } : d));
     } else {
-      await supabase.from('operation_orders').update({
-        status: 'closed',
-        actual_return_date: new Date().toISOString(),
-        return_mileage: settlement.return_mileage,
-        amount_received_from_customer: settlement.amount_received,
-        amount_paid_to_external_supplier: settlement.amount_paid_supplier,
-      }).eq('id', selectedOrderToSettle.id);
+      if (tenant) {
+        await supabase.from('operation_orders').update({
+          status: 'closed',
+          actual_return_date: new Date().toISOString(),
+          return_mileage: settlement.return_mileage,
+          amount_received_from_customer: settlement.amount_received,
+          amount_paid_to_external_supplier: settlement.amount_paid_supplier,
+          net_profit: profit
+        }).eq('id', selectedOrderToSettle.id).eq('tenant_id', tenant.id);
 
-      if (settlement.expenses.length > 0) {
-        const { data: member } = await supabase.from('tenant_members').select('tenant_id').limit(1).single();
-        if (member) {
+        await supabase.from('vehicles').update({ 
+          status: 'available', 
+          current_mileage: settlement.return_mileage 
+        }).eq('id', selectedOrderToSettle.vehicle_id).eq('tenant_id', tenant.id);
+
+        await supabase.from('drivers').update({ 
+          status: 'active' 
+        }).eq('id', selectedOrderToSettle.driver_id).eq('tenant_id', tenant.id);
+
+        if (settlement.expenses.length > 0) {
           const insertPayload = settlement.expenses.map(exp => ({
-            tenant_id: member.tenant_id,
+            tenant_id: tenant.id,
             order_id: selectedOrderToSettle.id,
             amount: exp.amount,
             category: exp.category,
@@ -343,8 +360,8 @@ export default function OperationsPage() {
           }));
           await supabase.from('expenses').insert(insertPayload);
         }
+        loadData();
       }
-      loadData();
     }
 
     setShowSettleModal(false);

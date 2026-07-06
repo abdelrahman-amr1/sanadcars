@@ -1,8 +1,9 @@
 'use client';
 
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
+import { useTenant } from '@/lib/context/TenantContext';
 import {
   LayoutDashboard,
   Car,
@@ -10,8 +11,8 @@ import {
   Activity,
   FileText,
   Wrench,
-  Settings,
   LogOut,
+  LogIn,
   ChevronLeft,
   Menu
 } from 'lucide-react';
@@ -28,7 +29,17 @@ const menuItems = [
 
 export function Sidebar() {
   const pathname = usePathname();
+  const router = useRouter();
   const [isOpen, setIsOpen] = useState(true);
+  const { user, tenant, isDemoMode, toggleDemoMode, logout } = useTenant();
+
+  const handleAuthAction = () => {
+    if (user) {
+      logout();
+    } else {
+      router.push('/login');
+    }
+  };
 
   return (
     <>
@@ -68,7 +79,9 @@ export function Sidebar() {
               {isOpen && (
                 <div className="flex flex-col">
                   <span className="font-black text-slate-100 tracking-wider text-base">FleetFlow</span>
-                  <span className="text-[10px] text-emerald-400 font-semibold tracking-widest uppercase">Pro SaaS</span>
+                  <span className="text-[10px] text-emerald-400 font-semibold tracking-widest uppercase">
+                    {isDemoMode ? 'Sandbox Preview' : 'Pro SaaS'}
+                  </span>
                 </div>
               )}
             </div>
@@ -113,34 +126,67 @@ export function Sidebar() {
           </nav>
         </div>
 
-        {/* Footer User Info */}
-        <div className="p-4 border-t border-slate-800/50 flex flex-col gap-2">
-          {isOpen ? (
-            <div className="flex items-center gap-3 bg-slate-950/40 p-3 rounded-xl border border-slate-850/50">
-              <div className="w-9 h-9 rounded-lg bg-emerald-500/10 flex items-center justify-center text-emerald-400 font-bold border border-emerald-500/20">
-                م
+        {/* Footer Area */}
+        <div className="flex flex-col">
+          {/* Mode Switcher */}
+          <div className="px-4 py-2">
+            <button
+              onClick={toggleDemoMode}
+              className={cn(
+                "w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-semibold border transition-all duration-200",
+                isDemoMode
+                  ? "bg-amber-500/5 border-amber-500/15 text-amber-400 hover:bg-amber-500/10"
+                  : "bg-emerald-500/5 border-emerald-500/15 text-emerald-450 hover:bg-emerald-500/10"
+              )}
+            >
+              <div className="flex items-center gap-2">
+                <span className={cn("w-2 h-2 rounded-full animate-pulse", isDemoMode ? "bg-amber-400" : "bg-emerald-450")} />
+                {isOpen && <span>{isDemoMode ? "وضع المعاينة" : "قاعدة البيانات الحية"}</span>}
               </div>
-              <div className="flex flex-col overflow-hidden">
-                <span className="text-xs font-bold text-slate-200 truncate">مكتب الفخامة لتأجير السيارات</span>
-                <span className="text-[10px] text-slate-500 truncate">تأجير وتشغيل متكامل</span>
-              </div>
-            </div>
-          ) : (
-            <div className="w-10 h-10 rounded-lg bg-emerald-500/10 flex items-center justify-center text-emerald-400 font-bold border border-emerald-500/20 mx-auto">
-              م
-            </div>
-          )}
+              {isOpen && (
+                <span className="text-[9px] font-bold text-slate-500 hover:text-slate-350">
+                  {isDemoMode ? "اتصال" : "معاينة"}
+                </span>
+              )}
+            </button>
+          </div>
 
-          <button
-            onClick={() => console.log('logout')}
-            className={cn(
-              "flex items-center gap-3 px-4 py-2.5 rounded-xl text-xs font-semibold text-rose-400 hover:bg-rose-500/10 hover:text-rose-300 transition-all border border-transparent mt-2",
-              !isOpen && "justify-center"
+          {/* Footer User Info */}
+          <div className="p-4 border-t border-slate-800/50 flex flex-col gap-2">
+            {isOpen ? (
+              <div className="flex items-center gap-3 bg-slate-950/40 p-3 rounded-xl border border-slate-850/50">
+                <div className="w-9 h-9 rounded-lg bg-emerald-500/10 flex items-center justify-center text-emerald-400 font-bold border border-emerald-500/20 shrink-0">
+                  {isDemoMode ? "م" : tenant?.name ? tenant.name.substring(0, 1) : "م"}
+                </div>
+                <div className="flex flex-col overflow-hidden text-right">
+                  <span className="text-xs font-bold text-slate-200 truncate">
+                    {isDemoMode ? "مكتب المعاينة التجريبي" : (tenant?.name || "جاري جلب البيانات...")}
+                  </span>
+                  <span className="text-[10px] text-slate-550 truncate" style={{ direction: 'ltr' }}>
+                    {isDemoMode ? "demo@fleetflow.com" : (user?.email || "غير متصل")}
+                  </span>
+                </div>
+              </div>
+            ) : (
+              <div className="w-10 h-10 rounded-lg bg-emerald-500/10 flex items-center justify-center text-emerald-400 font-bold border border-emerald-500/20 mx-auto">
+                {isDemoMode ? "م" : tenant?.name ? tenant.name.substring(0, 1) : "م"}
+              </div>
             )}
-          >
-            <LogOut className="w-4 h-4 shrink-0" />
-            {isOpen && <span>تسجيل الخروج</span>}
-          </button>
+
+            <button
+              onClick={handleAuthAction}
+              className={cn(
+                "flex items-center gap-3 px-4 py-2.5 rounded-xl text-xs font-semibold transition-all border border-transparent mt-2",
+                user 
+                  ? "text-rose-450 hover:bg-rose-500/10 hover:text-rose-400" 
+                  : "text-emerald-450 hover:bg-emerald-500/10 hover:text-emerald-400",
+                !isOpen && "justify-center"
+              )}
+            >
+              {user ? <LogOut className="w-4 h-4 shrink-0" /> : <LogIn className="w-4 h-4 shrink-0" />}
+              {isOpen && <span>{user ? "تسجيل الخروج" : "تسجيل الدخول"}</span>}
+            </button>
+          </div>
         </div>
       </aside>
 
@@ -154,3 +200,4 @@ export function Sidebar() {
     </>
   );
 }
+

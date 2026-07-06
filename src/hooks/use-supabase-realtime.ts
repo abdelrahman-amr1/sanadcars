@@ -7,10 +7,13 @@ export function useRealtimeTable<T extends { id: string }>(
   selectQuery: string = '*'
 ) {
   const [data, setData] = useState<T[]>(initialData);
+  const [prevInitialData, setPrevInitialData] = useState<T[]>(initialData);
 
-  useEffect(() => {
+  // Sync prop changes to state during render (React recommended pattern)
+  if (initialData !== prevInitialData) {
     setData(initialData);
-  }, [initialData]);
+    setPrevInitialData(initialData);
+  }
 
   useEffect(() => {
     const channel = supabase
@@ -22,37 +25,40 @@ export function useRealtimeTable<T extends { id: string }>(
           schema: 'public',
           table: tableName,
         },
-        async (payload: any) => {
+        async (payload: { eventType: string; new: Record<string, unknown>; old: Record<string, unknown> }) => {
+          const newRow = payload.new as T;
+          const oldRow = payload.old as { id: string };
+
           if (payload.eventType === 'INSERT') {
             const { data: newData, error } = await supabase
               .from(tableName)
               .select(selectQuery)
-              .eq('id', payload.new.id)
+              .eq('id', newRow.id)
               .single();
 
             if (!error && newData) {
               setData((prev) => [newData as unknown as T, ...prev]);
-            } else if (payload.new) {
-              setData((prev) => [payload.new as unknown as T, ...prev]);
+            } else if (newRow) {
+              setData((prev) => [newRow, ...prev]);
             }
           } else if (payload.eventType === 'UPDATE') {
             const { data: updatedData, error } = await supabase
               .from(tableName)
               .select(selectQuery)
-              .eq('id', payload.new.id)
+              .eq('id', newRow.id)
               .single();
 
             if (!error && updatedData) {
               setData((prev) =>
-                prev.map((item) => (item.id === payload.new.id ? (updatedData as unknown as T) : item))
+                prev.map((item) => (item.id === newRow.id ? (updatedData as unknown as T) : item))
               );
-            } else if (payload.new) {
+            } else if (newRow) {
               setData((prev) =>
-                prev.map((item) => (item.id === payload.new.id ? (payload.new as unknown as T) : item))
+                prev.map((item) => (item.id === newRow.id ? newRow : item))
               );
             }
           } else if (payload.eventType === 'DELETE') {
-            setData((prev) => prev.filter((item) => item.id !== payload.old.id));
+            setData((prev) => prev.filter((item) => item.id !== oldRow.id));
           }
         }
       )
@@ -65,4 +71,5 @@ export function useRealtimeTable<T extends { id: string }>(
 
   return [data, setData] as const;
 }
+
 

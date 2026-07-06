@@ -1,7 +1,8 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase/client';
+import { useTenant } from '@/lib/context/TenantContext';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -41,8 +42,8 @@ const mockVehicles: Vehicle[] = [
 ];
 
 export default function VehiclesPage() {
+  const { tenant, isDemoMode } = useTenant();
   const [vehicles, setVehicles] = useState<Vehicle[]>(mockVehicles);
-  const [isUsingMock, setIsUsingMock] = useState(true);
   const [showAddModal, setShowAddModal] = useState(false);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
@@ -57,29 +58,30 @@ export default function VehiclesPage() {
     status: 'available' as Vehicle['status']
   });
 
-  useEffect(() => {
-    async function checkSupabase() {
-      try {
-        const { data, error } = await supabase.from('vehicles').select('*');
-        if (!error && data) {
-          setVehicles(data as Vehicle[]);
-          setIsUsingMock(false);
-        }
-      } catch {
-        setIsUsingMock(true);
-      }
+  // Sync Demo Mode changes at render time
+  const [prevDemoMode, setPrevDemoMode] = useState(isDemoMode);
+  if (isDemoMode !== prevDemoMode) {
+    setPrevDemoMode(isDemoMode);
+    if (isDemoMode) {
+      setVehicles(mockVehicles);
     }
-    checkSupabase();
-  }, []);
+  }
 
-  const loadData = async () => {
-    const { data } = await supabase.from('vehicles').select('*');
+  const loadData = useCallback(async () => {
+    if (!tenant) return;
+    const { data } = await supabase.from('vehicles').select('*').eq('tenant_id', tenant.id);
     if (data) setVehicles(data as Vehicle[]);
-  };
+  }, [tenant]);
+
+  useEffect(() => {
+    if (!isDemoMode && tenant) {
+      loadData();
+    }
+  }, [isDemoMode, tenant, loadData]);
 
   const handleAddVehicle = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (isUsingMock) {
+    if (isDemoMode) {
       const added: Vehicle = {
         id: `v_${Date.now()}`,
         plate_number: newVehicle.plate_number,
@@ -92,10 +94,9 @@ export default function VehiclesPage() {
       };
       setVehicles(prev => [added, ...prev]);
     } else {
-      const { data: member } = await supabase.from('tenant_members').select('tenant_id').limit(1).single();
-      if (member) {
+      if (tenant) {
         await supabase.from('vehicles').insert({
-          tenant_id: member.tenant_id,
+          tenant_id: tenant.id,
           plate_number: newVehicle.plate_number,
           model: newVehicle.model,
           owner_national_id: newVehicle.owner_national_id,
@@ -123,11 +124,13 @@ export default function VehiclesPage() {
   const toggleStatus = async (id: string, currentStatus: Vehicle['status']) => {
     const nextStatus: Vehicle['status'] = currentStatus === 'available' ? 'maintenance' : 'available';
 
-    if (isUsingMock) {
+    if (isDemoMode) {
       setVehicles(prev => prev.map(v => v.id === id ? { ...v, status: nextStatus } : v));
     } else {
-      await supabase.from('vehicles').update({ status: nextStatus }).eq('id', id);
-      loadData();
+      if (tenant) {
+        await supabase.from('vehicles').update({ status: nextStatus }).eq('id', id).eq('tenant_id', tenant.id);
+        loadData();
+      }
     }
   };
 

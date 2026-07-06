@@ -1,7 +1,8 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase/client';
+import { useTenant } from '@/lib/context/TenantContext';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -17,7 +18,7 @@ import {
   CheckCircle,
   HelpCircle,
   Clock,
-  TrendingDown
+  TrendingUp
 } from 'lucide-react';
 
 interface Vehicle {
@@ -71,9 +72,9 @@ const mockLogs: MaintenanceLog[] = [
 ];
 
 export default function MaintenancePage() {
+  const { tenant, isDemoMode } = useTenant();
   const [vehicles, setVehicles] = useState<Vehicle[]>(mockVehicles);
   const [logs, setLogs] = useState<MaintenanceLog[]>(mockLogs);
-  const [isUsingMock, setIsUsingMock] = useState(true);
   const [showAddModal, setShowAddModal] = useState(false);
 
   const [newLog, setNewLog] = useState({
@@ -86,31 +87,33 @@ export default function MaintenancePage() {
     is_completed: true
   });
 
-  useEffect(() => {
-    async function checkSupabase() {
-      try {
-        const { data, error } = await supabase.from('maintenance_logs').select('*');
-        if (!error && data) {
-          setIsUsingMock(false);
-          loadData();
-        }
-      } catch {
-        setIsUsingMock(true);
-      }
+  // Sync Demo Mode changes at render time
+  const [prevDemoMode, setPrevDemoMode] = useState(isDemoMode);
+  if (isDemoMode !== prevDemoMode) {
+    setPrevDemoMode(isDemoMode);
+    if (isDemoMode) {
+      setVehicles(mockVehicles);
+      setLogs(mockLogs);
     }
-    checkSupabase();
-  }, []);
+  }
 
-  const loadData = async () => {
-    const { data: vData } = await supabase.from('vehicles').select('id, plate_number, model, current_mileage');
+  const loadData = useCallback(async () => {
+    if (!tenant) return;
+    const { data: vData } = await supabase.from('vehicles').select('id, plate_number, model, current_mileage').eq('tenant_id', tenant.id);
     const { data: mData } = await supabase.from('maintenance_logs').select(`
       *,
       vehicle:vehicles(id, plate_number, model, current_mileage)
-    `).order('created_at', { ascending: false });
+    `).eq('tenant_id', tenant.id).order('created_at', { ascending: false });
 
     if (vData) setVehicles(vData as Vehicle[]);
     if (mData) setLogs(mData as MaintenanceLog[]);
-  };
+  }, [tenant]);
+
+  useEffect(() => {
+    if (!isDemoMode && tenant) {
+      loadData();
+    }
+  }, [isDemoMode, tenant, loadData]);
 
   const handleVehicleChange = (vId: string) => {
     const veh = vehicles.find(v => v.id === vId);
@@ -124,7 +127,7 @@ export default function MaintenancePage() {
 
   const handleAddLog = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (isUsingMock) {
+    if (isDemoMode) {
       const selectedVehicle = vehicles.find(v => v.id === newLog.vehicle_id);
       const added: MaintenanceLog = {
         id: `m_${Date.now()}`,
@@ -138,13 +141,11 @@ export default function MaintenancePage() {
         vehicle: selectedVehicle
       };
 
-      // Also update vehicle mileage locally if needed
       setLogs(prev => [added, ...prev]);
     } else {
-      const { data: member } = await supabase.from('tenant_members').select('tenant_id').limit(1).single();
-      if (member) {
+      if (tenant) {
         await supabase.from('maintenance_logs').insert({
-          tenant_id: member.tenant_id,
+          tenant_id: tenant.id,
           vehicle_id: newLog.vehicle_id,
           mileage_at_maintenance: newLog.mileage_at_maintenance,
           description: newLog.description,
@@ -153,6 +154,12 @@ export default function MaintenancePage() {
           next_maintenance_mileage: newLog.next_maintenance_mileage,
           is_completed: newLog.is_completed
         });
+
+        // Also update vehicle mileage in Supabase
+        await supabase.from('vehicles').update({
+          current_mileage: newLog.mileage_at_maintenance
+        }).eq('id', newLog.vehicle_id).eq('tenant_id', tenant.id);
+
         loadData();
       }
     }
