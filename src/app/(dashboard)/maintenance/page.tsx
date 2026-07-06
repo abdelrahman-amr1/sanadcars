@@ -73,8 +73,8 @@ const mockLogs: MaintenanceLog[] = [
 
 export default function MaintenancePage() {
   const { tenant, isDemoMode } = useTenant();
-  const [vehicles, setVehicles] = useState<Vehicle[]>(mockVehicles);
-  const [logs, setLogs] = useState<MaintenanceLog[]>(mockLogs);
+  const [vehicles, setVehicles] = useState<Vehicle[]>([]);
+  const [logs, setLogs] = useState<MaintenanceLog[]>([]);
   const [showAddModal, setShowAddModal] = useState(false);
 
   const [newLog, setNewLog] = useState({

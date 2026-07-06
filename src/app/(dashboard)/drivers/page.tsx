@@ -38,7 +38,7 @@ const mockDrivers: Driver[] = [
 
 export default function DriversPage() {
   const { tenant, isDemoMode } = useTenant();
-  const [drivers, setDrivers] = useState<Driver[]>(mockDrivers);
+  const [drivers, setDrivers] = useState<Driver[]>([]);
   const [showAddModal, setShowAddModal] = useState(false);
   const [search, setSearch] = useState('');
 

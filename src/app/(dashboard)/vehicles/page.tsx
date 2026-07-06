@@ -43,7 +43,7 @@ const mockVehicles: Vehicle[] = [
 
 export default function VehiclesPage() {
   const { tenant, isDemoMode } = useTenant();
-  const [vehicles, setVehicles] = useState<Vehicle[]>(mockVehicles);
+  const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [showAddModal, setShowAddModal] = useState(false);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');

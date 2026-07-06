@@ -127,9 +127,9 @@ export default function Dashboard() {
   const { tenant, isDemoMode } = useTenant();
   const router = useRouter();
 
-  const [vehicles, setVehicles] = useState<Vehicle[]>(mockVehicles);
-  const [drivers, setDrivers] = useState<Driver[]>(mockDrivers);
-  const [orders, setOrders] = useState<OperationOrder[]>(mockOrders);
+  const [vehicles, setVehicles] = useState<Vehicle[]>([]);
+  const [drivers, setDrivers] = useState<Driver[]>([]);
+  const [orders, setOrders] = useState<OperationOrder[]>([]);
 
   // Forms states
   const [showNewOrderModal, setShowNewOrderModal] = useState(false);

@@ -10,18 +10,18 @@ export default function DashboardLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const { user, loading, isDemoMode, needsOnboarding } = useTenant();
+  const { user, loading, isDemoMode, needsOnboarding, isSuperAdmin } = useTenant();
   const router = useRouter();
 
   useEffect(() => {
     if (!loading) {
       if (!isDemoMode && !user) {
         router.push('/login');
-      } else if (!isDemoMode && user && needsOnboarding) {
+      } else if (!isDemoMode && user && needsOnboarding && !isSuperAdmin) {
         router.push('/setup-tenant');
       }
     }
-  }, [user, loading, isDemoMode, needsOnboarding, router]);
+  }, [user, loading, isDemoMode, needsOnboarding, isSuperAdmin, router]);
 
   if (loading) {
     return (
@@ -34,8 +34,8 @@ export default function DashboardLayout({
     );
   }
 
-  // Render the dashboard if in demo mode OR user is authenticated and setup is completed
-  if (isDemoMode || (user && !needsOnboarding)) {
+  // Render the dashboard if in demo mode OR user is authenticated and setup is completed (or is super admin)
+  if (isDemoMode || (user && (!needsOnboarding || isSuperAdmin))) {
     return (
       <div className="flex min-h-screen bg-slate-950 text-slate-100" style={{ direction: 'rtl' }}>
         {/* Sidebar navigation */}

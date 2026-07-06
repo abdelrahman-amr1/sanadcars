@@ -125,9 +125,9 @@ const mockOrders: OperationOrder[] = [
 
 export default function OperationsPage() {
   const { tenant, isDemoMode } = useTenant();
-  const [vehicles, setVehicles] = useState<Vehicle[]>(mockVehicles);
-  const [drivers, setDrivers] = useState<Driver[]>(mockDrivers);
-  const [orders, setOrders] = useState<OperationOrder[]>(mockOrders);
+  const [vehicles, setVehicles] = useState<Vehicle[]>([]);
+  const [drivers, setDrivers] = useState<Driver[]>([]);
+  const [orders, setOrders] = useState<OperationOrder[]>([]);
 
   // Modal controls
   const [showNewOrderModal, setShowNewOrderModal] = useState(false);

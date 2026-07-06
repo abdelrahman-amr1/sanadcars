@@ -65,8 +65,8 @@ const mockViolations: Violation[] = [
 
 export default function ViolationsPage() {
   const { tenant, isDemoMode } = useTenant();
-  const [vehicles, setVehicles] = useState<Vehicle[]>(mockVehicles);
-  const [violations, setViolations] = useState<Violation[]>(mockViolations);
+  const [vehicles, setVehicles] = useState<Vehicle[]>([]);
+  const [violations, setViolations] = useState<Violation[]>([]);
   const [showAddModal, setShowAddModal] = useState(false);
   const [search, setSearch] = useState('');
 
