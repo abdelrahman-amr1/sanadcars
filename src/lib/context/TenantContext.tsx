@@ -26,29 +26,13 @@ const TenantContext = createContext<TenantContextType | undefined>(undefined);
 export function TenantProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [tenant, setTenant] = useState<Tenant | null>(null);
-  const [isDemoMode, setIsDemoModeState] = useState<boolean>(() => {
-    if (typeof window !== 'undefined') {
-      const storedDemo = localStorage.getItem('fleetflow_demo_mode');
-      return storedDemo !== null ? storedDemo === 'true' : true;
-    }
-    return true;
-  });
+  const isDemoMode = false; // Disabled completely as requested
   const [loading, setLoading] = useState<boolean>(true);
   const [needsOnboarding, setNeedsOnboarding] = useState<boolean>(false);
   const router = useRouter();
 
-  const toggleDemoMode = () => {
-    setIsDemoModeState((prev) => {
-      const newVal = !prev;
-      localStorage.setItem('fleetflow_demo_mode', String(newVal));
-      return newVal;
-    });
-  };
-
-  const setDemoMode = (val: boolean) => {
-    setIsDemoModeState(val);
-    localStorage.setItem('fleetflow_demo_mode', String(val));
-  };
+  const toggleDemoMode = () => {};
+  const setDemoMode = (val: boolean) => {};
 
   const fetchTenantData = async (userId: string) => {
     try {
@@ -152,8 +136,6 @@ export function TenantProvider({ children }: { children: React.ReactNode }) {
       setUser(null);
       setTenant(null);
       setNeedsOnboarding(false);
-      // Automatically keep demo mode on logout so they can still browse the sandbox
-      setDemoMode(true);
       router.push('/login');
     } catch (err) {
       console.error('Logout error:', err);

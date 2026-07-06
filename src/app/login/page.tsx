@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation';
 import { useTenant } from '@/lib/context/TenantContext';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { LogIn, ShieldAlert, Sparkles } from 'lucide-react';
+import { LogIn, ShieldAlert } from 'lucide-react';
 import Link from 'next/link';
 
 export default function LoginPage() {
@@ -39,11 +39,6 @@ export default function LoginPage() {
     } finally {
       setLoadingSubmit(false);
     }
-  };
-
-  const handleDemoMode = () => {
-    setDemoMode(true);
-    router.push('/');
   };
 
   return (
@@ -108,20 +103,6 @@ export default function LoginPage() {
               <LogIn className="w-4 h-4 mr-2" />
             </Button>
           </form>
-
-          <div className="relative flex items-center justify-center my-1">
-            <div className="border-t border-slate-800 w-full absolute" />
-            <span className="bg-slate-900 px-3 text-[10px] text-slate-500 uppercase tracking-widest relative z-10">أو</span>
-          </div>
-
-          <Button
-            onClick={handleDemoMode}
-            variant="outline"
-            className="w-full border-slate-800 text-slate-350 hover:bg-slate-800/40 hover:text-slate-100 font-bold gap-2 py-2.5"
-          >
-            <Sparkles className="w-4 h-4 text-emerald-400" />
-            تصفح كـ زائر (وضع المعاينة الفوري)
-          </Button>
 
           <p className="text-center text-xs text-slate-400 mt-2">
             ليس لديك حساب بعد؟{' '}

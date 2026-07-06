@@ -31,7 +31,7 @@ export function Sidebar() {
   const pathname = usePathname();
   const router = useRouter();
   const [isOpen, setIsOpen] = useState(true);
-  const { user, tenant, isDemoMode, toggleDemoMode, logout } = useTenant();
+  const { user, tenant, isDemoMode, logout } = useTenant();
 
   const handleAuthAction = () => {
     if (user) {
@@ -128,28 +128,6 @@ export function Sidebar() {
 
         {/* Footer Area */}
         <div className="flex flex-col">
-          {/* Mode Switcher */}
-          <div className="px-4 py-2">
-            <button
-              onClick={toggleDemoMode}
-              className={cn(
-                "w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-semibold border transition-all duration-200",
-                isDemoMode
-                  ? "bg-amber-500/5 border-amber-500/15 text-amber-400 hover:bg-amber-500/10"
-                  : "bg-emerald-500/5 border-emerald-500/15 text-emerald-450 hover:bg-emerald-500/10"
-              )}
-            >
-              <div className="flex items-center gap-2">
-                <span className={cn("w-2 h-2 rounded-full animate-pulse", isDemoMode ? "bg-amber-400" : "bg-emerald-450")} />
-                {isOpen && <span>{isDemoMode ? "وضع المعاينة" : "قاعدة البيانات الحية"}</span>}
-              </div>
-              {isOpen && (
-                <span className="text-[9px] font-bold text-slate-500 hover:text-slate-350">
-                  {isDemoMode ? "اتصال" : "معاينة"}
-                </span>
-              )}
-            </button>
-          </div>
 
           {/* Footer User Info */}
           <div className="p-4 border-t border-slate-800/50 flex flex-col gap-2">
