@@ -6,11 +6,26 @@ import { useRouter } from 'next/navigation';
 import { Database } from '@/types/database.types';
 import { User } from '@supabase/supabase-js';
 
-type Tenant = Database['public']['Tables']['tenants']['Row'];
+export type Tenant = Database['public']['Tables']['tenants']['Row'] & {
+  primary_color?: string;
+  dark_mode?: boolean;
+};
+
+export interface TenantRequest {
+  id: string;
+  company_name: string;
+  full_name: string;
+  email: string;
+  phone: string;
+  status: 'pending' | 'approved' | 'rejected';
+  user_id: string;
+  created_at: string;
+}
 
 interface TenantContextType {
   user: User | null;
   tenant: Tenant | null;
+  joinRequest: TenantRequest | null;
   isDemoMode: boolean;
   isSuperAdmin: boolean;
   loading: boolean;
@@ -20,6 +35,7 @@ interface TenantContextType {
   logout: () => Promise<void>;
   refreshTenant: () => Promise<void>;
   createTenant: (name: string) => Promise<Tenant | null>;
+  submitJoinRequest: (companyName: string, fullName: string, phone: string) => Promise<TenantRequest | null>;
 }
 
 const TenantContext = createContext<TenantContextType | undefined>(undefined);
@@ -27,6 +43,7 @@ const TenantContext = createContext<TenantContextType | undefined>(undefined);
 export function TenantProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [tenant, setTenant] = useState<Tenant | null>(null);
+  const [joinRequest, setJoinRequest] = useState<TenantRequest | null>(null);
   const isDemoMode = false; // Disabled completely as requested
   const [loading, setLoading] = useState<boolean>(true);
   const [needsOnboarding, setNeedsOnboarding] = useState<boolean>(false);
@@ -50,6 +67,19 @@ export function TenantProvider({ children }: { children: React.ReactNode }) {
       }
 
       if (!memberData) {
+        // Fetch join requests if any
+        const { data: requestData } = await supabase
+          .from('tenant_requests')
+          .select('*')
+          .eq('user_id', userId)
+          .maybeSingle();
+
+        if (requestData) {
+          setJoinRequest(requestData as TenantRequest);
+        } else {
+          setJoinRequest(null);
+        }
+
         setNeedsOnboarding(true);
         setTenant(null);
         return null;
@@ -68,6 +98,7 @@ export function TenantProvider({ children }: { children: React.ReactNode }) {
       }
 
       setNeedsOnboarding(false);
+      setJoinRequest(null);
       setTenant(tenantData as Tenant);
       return tenantData as Tenant;
     } catch (err) {
@@ -80,6 +111,69 @@ export function TenantProvider({ children }: { children: React.ReactNode }) {
     if (!user) return;
     await fetchTenantData(user.id);
   };
+
+  // Dynamic Theme injector
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    const color = tenant?.primary_color || 'emerald';
+    const isDark = tenant?.dark_mode !== false; // default true
+
+    // Toggle dark class on document element
+    if (isDark) {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
+
+    // Color palettes mapping for styles overrides
+    const palettes: Record<string, { base: string; hover: string; light10: string; light20: string; border: string; from: string; to: string }> = {
+      emerald: { base: '#10b981', hover: '#059669', light10: '#10b9811a', light20: '#10b98133', border: '#10b98133', from: '#10b981', to: '#14b8a6' },
+      blue: { base: '#3b82f6', hover: '#2563eb', light10: '#3b82f61a', light20: '#3b82f633', border: '#3b82f633', from: '#3b82f6', to: '#06b6d4' },
+      rose: { base: '#f43f5e', hover: '#e11d48', light10: '#f43f5e1a', light20: '#f43f5e33', border: '#f43f5e33', from: '#f43f5e', to: '#ec4899' },
+      amber: { base: '#f59e0b', hover: '#d97706', light10: '#f59e0b1a', light20: '#f59e0b33', border: '#f59e0b33', from: '#f59e0b', to: '#f97316' },
+      indigo: { base: '#6366f1', hover: '#4f46e5', light10: '#6366f11a', light20: '#6366f133', border: '#6366f133', from: '#6366f1', to: '#a855f7' },
+      violet: { base: '#8b5cf6', hover: '#7c3aed', light10: '#8b5cf61a', light20: '#8b5cf633', border: '#8b5cf633', from: '#8b5cf6', to: '#ec4899' }
+    };
+
+    const p = palettes[color] || palettes.emerald;
+
+    let styleEl = document.getElementById('dynamic-tenant-theme');
+    if (!styleEl) {
+      styleEl = document.createElement('style');
+      styleEl.id = 'dynamic-tenant-theme';
+      document.head.appendChild(styleEl);
+    }
+
+    styleEl.innerHTML = `
+      :root {
+        --tenant-primary: ${p.base};
+        --tenant-primary-hover: ${p.hover};
+        --tenant-primary-light-10: ${p.light10};
+        --tenant-primary-light-20: ${p.light20};
+        --tenant-primary-border: ${p.border};
+        --tenant-primary-from: ${p.from};
+        --tenant-primary-to: ${p.to};
+      }
+      
+      /* Override Tailwind v4 utility classes on-the-fly */
+      .text-emerald-500, .text-emerald-450 { color: var(--tenant-primary) !important; }
+      .text-emerald-400 { color: var(--tenant-primary) !important; }
+      .bg-emerald-500 { background-color: var(--tenant-primary) !important; }
+      .bg-emerald-600 { background-color: var(--tenant-primary-hover) !important; }
+      .bg-emerald-500\\/10 { background-color: var(--tenant-primary-light-10) !important; }
+      .bg-emerald-500\\/20 { background-color: var(--tenant-primary-light-20) !important; }
+      .border-emerald-500 { border-color: var(--tenant-primary) !important; }
+      .border-emerald-500\\/20 { border-color: var(--tenant-primary-border) !important; }
+      .from-emerald-500 { --tw-gradient-from: var(--tenant-primary-from) !important; --tw-gradient-to: transparent !important; --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to) !important; }
+      .to-teal-400 { --tw-gradient-to: var(--tenant-primary-to) !important; }
+      .to-teal-500 { --tw-gradient-to: var(--tenant-primary-to) !important; }
+      .hover\\:bg-emerald-600:hover { background-color: var(--tenant-primary-hover) !important; }
+      .focus\\:ring-emerald-500:focus { --tw-ring-color: var(--tenant-primary) !important; }
+      .shadow-emerald-500\\/10 { box-shadow: 0 10px 15px -3px var(--tenant-primary-light-10), 0 4px 6px -4px var(--tenant-primary-light-10) !important; }
+      .shadow-emerald-500\\/25 { box-shadow: 0 10px 15px -3px var(--tenant-primary-light-20), 0 4px 6px -4px var(--tenant-primary-light-20) !important; }
+    `;
+  }, [tenant]);
 
   // Listen to Supabase Auth state changes
   useEffect(() => {
@@ -97,6 +191,7 @@ export function TenantProvider({ children }: { children: React.ReactNode }) {
           if (mounted) {
             setUser(null);
             setTenant(null);
+            setJoinRequest(null);
             setNeedsOnboarding(false);
           }
         }
@@ -118,6 +213,7 @@ export function TenantProvider({ children }: { children: React.ReactNode }) {
         } else {
           setUser(null);
           setTenant(null);
+          setJoinRequest(null);
           setNeedsOnboarding(false);
         }
         setLoading(false);
@@ -136,6 +232,7 @@ export function TenantProvider({ children }: { children: React.ReactNode }) {
       await supabase.auth.signOut();
       setUser(null);
       setTenant(null);
+      setJoinRequest(null);
       setNeedsOnboarding(false);
       router.push('/login');
     } catch (err) {
@@ -177,12 +274,38 @@ export function TenantProvider({ children }: { children: React.ReactNode }) {
 
       setTenant(tenantData as Tenant);
       setNeedsOnboarding(false);
-      setDemoMode(false); // Move out of demo mode immediately when creating a workspace
-
       return tenantData as Tenant;
     } catch (err) {
       console.error('Failed to create tenant:', err);
       alert('حدث خطأ أثناء إنشاء الشركة، يرجى المحاولة لاحقاً');
+      return null;
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const submitJoinRequest = async (companyName: string, fullName: string, phone: string): Promise<TenantRequest | null> => {
+    if (!user) return null;
+    setLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from('tenant_requests')
+        .insert({
+          company_name: companyName,
+          full_name: fullName,
+          email: user.email || '',
+          phone,
+          user_id: user.id
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+      setJoinRequest(data as TenantRequest);
+      return data as TenantRequest;
+    } catch (err) {
+      console.error('Failed to submit join request:', err);
+      alert('فشل تقديم طلب الانضمام. يرجى المحاولة لاحقاً.');
       return null;
     } finally {
       setLoading(false);
@@ -196,6 +319,7 @@ export function TenantProvider({ children }: { children: React.ReactNode }) {
       value={{
         user,
         tenant,
+        joinRequest,
         isDemoMode,
         isSuperAdmin,
         loading,
@@ -205,6 +329,7 @@ export function TenantProvider({ children }: { children: React.ReactNode }) {
         logout,
         refreshTenant,
         createTenant,
+        submitJoinRequest,
       }}
     >
       {children}

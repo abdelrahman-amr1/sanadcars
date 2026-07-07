@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase/client';
 import { useTenant } from '@/lib/context/TenantContext';
+import { logActivity } from '@/lib/utils/audit';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -105,6 +106,15 @@ export default function VehiclesPage() {
           current_mileage: newVehicle.current_mileage,
           status: newVehicle.status
         });
+
+        await logActivity({
+          tenantId: tenant.id,
+          action: 'create',
+          entityType: 'vehicle',
+          entityName: `إضافة سيارة جديدة: ${newVehicle.model} (${newVehicle.plate_number})`,
+          details: newVehicle
+        });
+
         loadData();
       }
     }
@@ -129,6 +139,16 @@ export default function VehiclesPage() {
     } else {
       if (tenant) {
         await supabase.from('vehicles').update({ status: nextStatus }).eq('id', id).eq('tenant_id', tenant.id);
+        
+        const vehicle = vehicles.find(v => v.id === id);
+        await logActivity({
+          tenantId: tenant.id,
+          action: 'update',
+          entityType: 'vehicle',
+          entityName: `تعديل حالة السيارة: ${vehicle?.model || ''} (${vehicle?.plate_number || ''}) إلى ${nextStatus === 'maintenance' ? 'صيانة' : 'متاحة'}`,
+          details: { id, nextStatus }
+        });
+
         loadData();
       }
     }

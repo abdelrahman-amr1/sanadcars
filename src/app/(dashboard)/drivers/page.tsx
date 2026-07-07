@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase/client';
 import { useTenant } from '@/lib/context/TenantContext';
+import { logActivity } from '@/lib/utils/audit';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -93,6 +94,15 @@ export default function DriversPage() {
           phone: newDriver.phone,
           status: newDriver.status
         });
+
+        await logActivity({
+          tenantId: tenant.id,
+          action: 'create',
+          entityType: 'driver',
+          entityName: `إضافة سائق جديد: ${newDriver.name} (جوال: ${newDriver.phone})`,
+          details: newDriver
+        });
+
         loadData();
       }
     }

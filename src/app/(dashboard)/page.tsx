@@ -122,6 +122,7 @@ const mockOrders: OperationOrder[] = [
 
 import { useTenant } from '@/lib/context/TenantContext';
 import { useRouter } from 'next/navigation';
+import { logActivity } from '@/lib/utils/audit';
 
 export default function Dashboard() {
   const { tenant, isDemoMode } = useTenant();
@@ -287,6 +288,17 @@ export default function Dashboard() {
         await supabase.from('vehicles').update({ status: 'in_operation' }).eq('id', newOrder.vehicle_id);
         await supabase.from('drivers').update({ status: 'in_operation' }).eq('id', newOrder.driver_id);
 
+        const vehicle = vehicles.find(v => v.id === newOrder.vehicle_id);
+        const driver = drivers.find(d => d.id === newOrder.driver_id);
+
+        await logActivity({
+          tenantId: tenant.id,
+          action: 'create',
+          entityType: 'order',
+          entityName: `فتح عقد تشغيل جديد للعميل: ${newOrder.customer_name} (سيارة: ${vehicle?.model || ''}, سائق: ${driver?.name || ''})`,
+          details: newOrder
+        });
+
         loadLiveSupabaseData();
       }
     }
@@ -387,6 +399,14 @@ export default function Dashboard() {
           }));
           await supabase.from('expenses').insert(insertPayload);
         }
+
+        await logActivity({
+          tenantId: tenant.id,
+          action: 'update',
+          entityType: 'order',
+          entityName: `إغلاق وتسوية عقد تشغيل العميل: ${selectedOrderToSettle.customer_name} (صافي الربح: ${profit} ر.س)`,
+          details: { id: selectedOrderToSettle.id, profit, settlement }
+        });
 
         loadLiveSupabaseData();
       }

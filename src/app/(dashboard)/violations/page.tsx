@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase/client';
 import { useTenant } from '@/lib/context/TenantContext';
+import { logActivity } from '@/lib/utils/audit';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -133,6 +134,16 @@ export default function ViolationsPage() {
           order_id: newViolation.order_id || null,
           status: newViolation.status
         });
+
+        const vehicle = vehicles.find(v => v.id === newViolation.vehicle_id);
+        await logActivity({
+          tenantId: tenant.id,
+          action: 'create',
+          entityType: 'violation',
+          entityName: `رصد مخالفة مرورية رقم: ${newViolation.violation_number} بقيمة ${newViolation.amount} ر.س (على سيارة: ${vehicle?.model || ''})`,
+          details: newViolation
+        });
+
         loadData();
       }
     }

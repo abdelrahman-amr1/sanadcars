@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase/client';
 import { useTenant } from '@/lib/context/TenantContext';
+import { logActivity } from '@/lib/utils/audit';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -159,6 +160,15 @@ export default function MaintenancePage() {
         await supabase.from('vehicles').update({
           current_mileage: newLog.mileage_at_maintenance
         }).eq('id', newLog.vehicle_id).eq('tenant_id', tenant.id);
+
+        const vehicle = vehicles.find(v => v.id === newLog.vehicle_id);
+        await logActivity({
+          tenantId: tenant.id,
+          action: 'create',
+          entityType: 'maintenance',
+          entityName: `تسجيل صيانة جديدة للسيارة: ${vehicle?.model || ''} - ${newLog.description} بقيمة ${newLog.cost} ر.س`,
+          details: newLog
+        });
 
         loadData();
       }

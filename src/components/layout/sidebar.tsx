@@ -15,7 +15,8 @@ import {
   LogIn,
   ChevronLeft,
   Menu,
-  ShieldCheck
+  ShieldCheck,
+  Settings
 } from 'lucide-react';
 import { useState } from 'react';
 
@@ -26,6 +27,7 @@ const menuItems = [
   { name: 'السائقين', href: '/drivers', icon: Users },
   { name: 'المخالفات المرورية', href: '/violations', icon: FileText },
   { name: 'الصيانة والعدادات', href: '/maintenance', icon: Wrench },
+  { name: 'الإعدادات والسمات', href: '/settings', icon: Settings },
 ];
 
 export function Sidebar() {
@@ -98,7 +100,7 @@ export function Sidebar() {
 
           {/* Navigation Links */}
           <nav className="p-4 flex flex-col gap-1.5 mt-4">
-            {menuItems.map((item) => {
+            {tenant && menuItems.map((item) => {
               const Icon = item.icon;
               const isActive = pathname === item.href;
               return (
