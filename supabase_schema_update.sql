@@ -154,3 +154,28 @@ ALTER TABLE expenses ALTER COLUMN order_id DROP NOT NULL;
 -- 12. إضافة أعمدة الصور للسيارات والسائقين
 ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS image_url text;
 ALTER TABLE drivers ADD COLUMN IF NOT EXISTS avatar_url text;
+
+-- 13. إضافة عمود الكود للسيارات لمطابقة أكواد الإكسل
+ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS code integer;
+
+-- 14. إنشاء جدول العملاء لترحيل وعرض العملاء من الشيت
+CREATE TABLE IF NOT EXISTS customers (
+  id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+  tenant_id uuid REFERENCES tenants(id) ON DELETE CASCADE,
+  name text NOT NULL,
+  phone text NOT NULL,
+  created_at timestamp with time zone DEFAULT timezone('utc'::text, now()) NOT NULL,
+  updated_at timestamp with time zone DEFAULT timezone('utc'::text, now()) NOT NULL,
+  UNIQUE (tenant_id, phone)
+);
+
+-- تفعيل RLS لجدول العملاء
+ALTER TABLE customers ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS customers_all ON customers;
+CREATE POLICY customers_all ON customers
+  FOR ALL TO authenticated
+  USING (
+    tenant_id IN (SELECT tenant_id FROM tenant_members WHERE user_id = auth.uid())
+    OR auth.jwt() ->> 'email' = 'abdelrahman.amr@gmail.com'
+  );

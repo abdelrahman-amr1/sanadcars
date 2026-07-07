@@ -26,6 +26,7 @@ import {
 
 interface Vehicle {
   id: string;
+  code?: number | null;
   plate_number: string;
   model: string;
   current_mileage: number;
@@ -137,6 +138,15 @@ export default function OperationsPage() {
   // Filter and search
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
+
+  // Combobox search state
+  const [vehicleSearch, setVehicleSearch] = useState('');
+  const [driverSearch, setDriverSearch] = useState('');
+  const [customerSearch, setCustomerSearch] = useState('');
+  const [showVehicleList, setShowVehicleList] = useState(false);
+  const [showDriverList, setShowDriverList] = useState(false);
+  const [showCustomerList, setShowCustomerList] = useState(false);
+  const [customers, setCustomers] = useState<{id: string; name: string; phone: string}[]>([]);
 
   // New order inputs
   const [newOrder, setNewOrder] = useState({
@@ -261,7 +271,7 @@ export default function OperationsPage() {
   const loadData = useCallback(async () => {
     if (!tenant) return;
     try {
-      const [vRes, dRes, oRes, eRes] = await Promise.all([
+      const [vRes, dRes, oRes, eRes, cRes] = await Promise.all([
         supabase.from('vehicles').select('*').eq('tenant_id', tenant.id),
         supabase.from('drivers').select('*').eq('tenant_id', tenant.id),
         supabase.from('operation_orders').select(`
@@ -269,11 +279,13 @@ export default function OperationsPage() {
           vehicle:vehicles(*),
           driver:drivers(*)
         `).eq('tenant_id', tenant.id).order('created_at', { ascending: false }),
-        supabase.from('expenses').select('*').eq('tenant_id', tenant.id)
+        supabase.from('expenses').select('*').eq('tenant_id', tenant.id),
+        supabase.from('customers').select('id,name,phone').eq('tenant_id', tenant.id).order('name')
       ]);
 
       if (vRes.data) setVehicles(vRes.data as Vehicle[]);
       if (dRes.data) setDrivers(dRes.data as Driver[]);
+      if (cRes.data) setCustomers(cRes.data as {id: string; name: string; phone: string}[]);
       if (oRes.data) {
         const expensesData = eRes.data || [];
         const ordersWithExpenses = oRes.data.map((order: any) => ({
@@ -638,46 +650,162 @@ export default function OperationsPage() {
             </CardHeader>
             <CardContent>
               <form onSubmit={handleCreateOrder} className="flex flex-col gap-4">
-                <div className="flex flex-col gap-1.5">
-                  <label className="text-xs text-slate-400 font-semibold">اختر السيارة المتاحة</label>
-                  <select
-                    required
-                    value={newOrder.vehicle_id}
-                    onChange={(e) => handleVehicleChange(e.target.value)}
-                    className="bg-slate-950 border border-slate-850 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:ring-1 focus:ring-emerald-500"
-                  >
-                    <option value="">-- حدد سيارة --</option>
-                    {vehicles.filter(v => v.status === 'available').map(v => (
-                      <option key={v.id} value={v.id}>{v.model} - {v.plate_number}</option>
-                    ))}
-                  </select>
+                {/* Vehicle Combobox — search by code or model name */}
+                <div className="flex flex-col gap-1.5 relative">
+                  <label className="text-xs text-slate-400 font-semibold">
+                    السيارة
+                    <span className="text-slate-600 font-normal mr-1">(اكتب الكود أو اسم الموديل)</span>
+                  </label>
+                  <input
+                    type="text"
+                    required={!newOrder.vehicle_id}
+                    placeholder="مثال: 3 أو هيونداي..."
+                    value={vehicleSearch}
+                    onFocus={() => setShowVehicleList(true)}
+                    onBlur={() => setTimeout(() => setShowVehicleList(false), 200)}
+                    onChange={(e) => {
+                      setVehicleSearch(e.target.value);
+                      setNewOrder(prev => ({ ...prev, vehicle_id: '', out_mileage: 0 }));
+                      setShowVehicleList(true);
+                    }}
+                    className={`bg-slate-950 border rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:ring-1 focus:ring-emerald-500 placeholder:text-slate-600 ${
+                      newOrder.vehicle_id ? 'border-emerald-500/50' : 'border-slate-800'
+                    }`}
+                  />
+                  {newOrder.vehicle_id && (
+                    <span className="text-xs text-emerald-400 mt-0.5">
+                      ✓ {vehicles.find(v => v.id === newOrder.vehicle_id)?.model} — عداد: {newOrder.out_mileage} كم
+                    </span>
+                  )}
+                  {showVehicleList && vehicleSearch.length > 0 && (
+                    <ul className="absolute top-full mt-1 right-0 left-0 bg-slate-900 border border-slate-800 rounded-xl shadow-xl z-40 max-h-48 overflow-y-auto">
+                      {vehicles
+                        .filter(v => v.status === 'available')
+                        .filter(v => {
+                          const q = vehicleSearch.trim().toLowerCase();
+                          const codeMatch = v.code != null && String(v.code) === q;
+                          const textMatch = v.model.toLowerCase().includes(q) || v.plate_number.toLowerCase().includes(q);
+                          return codeMatch || textMatch;
+                        })
+                        .map(v => (
+                          <li
+                            key={v.id}
+                            onMouseDown={() => {
+                              handleVehicleChange(v.id);
+                              setVehicleSearch(v.code ? `${v.code} — ${v.model}` : v.model);
+                              setShowVehicleList(false);
+                            }}
+                            className="px-3 py-2 text-sm text-slate-300 hover:bg-emerald-500/10 hover:text-emerald-300 cursor-pointer flex justify-between items-center gap-2"
+                          >
+                            <span>
+                              {v.code && <span className="text-emerald-400 font-bold ml-1">[{v.code}]</span>}
+                              {v.model}
+                            </span>
+                            <span className="text-xs text-slate-500">{v.plate_number}</span>
+                          </li>
+                        ))}
+                      {vehicles.filter(v => v.status === 'available').filter(v => {
+                        const q = vehicleSearch.trim().toLowerCase();
+                        return (v.code != null && String(v.code) === q) || v.model.toLowerCase().includes(q) || v.plate_number.toLowerCase().includes(q);
+                      }).length === 0 && (
+                        <li className="px-3 py-2 text-xs text-slate-500">لا توجد سيارات متاحة بهذا البحث</li>
+                      )}
+                    </ul>
+                  )}
                 </div>
 
-                <div className="flex flex-col gap-1.5">
-                  <label className="text-xs text-slate-400 font-semibold">اختر السائق النشط</label>
-                  <select
-                    required
-                    value={newOrder.driver_id}
-                    onChange={(e) => setNewOrder(prev => ({ ...prev, driver_id: e.target.value }))}
-                    className="bg-slate-950 border border-slate-850 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:ring-1 focus:ring-emerald-500"
-                  >
-                    <option value="">-- حدد سائق --</option>
-                    {drivers.filter(d => d.status === 'active').map(d => (
-                      <option key={d.id} value={d.id}>{d.name}</option>
-                    ))}
-                  </select>
+                {/* Driver Combobox */}
+                <div className="flex flex-col gap-1.5 relative">
+                  <label className="text-xs text-slate-400 font-semibold">السائق</label>
+                  <input
+                    type="text"
+                    placeholder="ابحث عن السائق باسمه..."
+                    value={driverSearch}
+                    onFocus={() => setShowDriverList(true)}
+                    onBlur={() => setTimeout(() => setShowDriverList(false), 200)}
+                    onChange={(e) => {
+                      setDriverSearch(e.target.value);
+                      setNewOrder(prev => ({ ...prev, driver_id: '' }));
+                      setShowDriverList(true);
+                    }}
+                    className={`bg-slate-950 border rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:ring-1 focus:ring-emerald-500 placeholder:text-slate-600 ${
+                      newOrder.driver_id ? 'border-emerald-500/50' : 'border-slate-800'
+                    }`}
+                  />
+                  {newOrder.driver_id && (
+                    <span className="text-xs text-emerald-400 mt-0.5">
+                      ✓ {drivers.find(d => d.id === newOrder.driver_id)?.name}
+                    </span>
+                  )}
+                  {showDriverList && driverSearch.length > 0 && (
+                    <ul className="absolute top-full mt-1 right-0 left-0 bg-slate-900 border border-slate-800 rounded-xl shadow-xl z-40 max-h-40 overflow-y-auto">
+                      {drivers
+                        .filter(d => d.status === 'active')
+                        .filter(d => d.name.toLowerCase().includes(driverSearch.toLowerCase()))
+                        .map(d => (
+                          <li
+                            key={d.id}
+                            onMouseDown={() => {
+                              setNewOrder(prev => ({ ...prev, driver_id: d.id }));
+                              setDriverSearch(d.name);
+                              setShowDriverList(false);
+                            }}
+                            className="px-3 py-2 text-sm text-slate-300 hover:bg-emerald-500/10 hover:text-emerald-300 cursor-pointer"
+                          >
+                            {d.name}
+                          </li>
+                        ))}
+                      {drivers.filter(d => d.status === 'active' && d.name.toLowerCase().includes(driverSearch.toLowerCase())).length === 0 && (
+                        <li className="px-3 py-2 text-xs text-slate-500">لا يوجد سائق بهذا الاسم</li>
+                      )}
+                    </ul>
+                  )}
                 </div>
 
-                <div className="flex flex-col gap-1.5">
-                  <label className="text-xs text-slate-400 font-semibold">اسم العميل بالكامل</label>
+                {/* Customer Combobox with autocomplete from customers table */}
+                <div className="flex flex-col gap-1.5 relative">
+                  <label className="text-xs text-slate-400 font-semibold">
+                    العميل
+                    <span className="text-slate-600 font-normal mr-1">(ابحث من القائمة أو اكتب اسماً جديداً)</span>
+                  </label>
                   <input
                     required
                     type="text"
-                    placeholder="اسم العميل"
-                    value={newOrder.customer_name}
-                    onChange={(e) => setNewOrder(prev => ({ ...prev, customer_name: e.target.value }))}
-                    className="bg-slate-950 border border-slate-850 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:ring-1 focus:ring-emerald-500 placeholder:text-slate-700"
+                    placeholder="ابدأ بكتابة اسم العميل..."
+                    value={customerSearch}
+                    onFocus={() => setShowCustomerList(true)}
+                    onBlur={() => setTimeout(() => setShowCustomerList(false), 200)}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setCustomerSearch(val);
+                      setNewOrder(prev => ({ ...prev, customer_name: val }));
+                      setShowCustomerList(true);
+                    }}
+                    className="bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:ring-1 focus:ring-emerald-500 placeholder:text-slate-600"
                   />
+                  {showCustomerList && customerSearch.length > 0 && (
+                    <ul className="absolute top-full mt-1 right-0 left-0 bg-slate-900 border border-slate-800 rounded-xl shadow-xl z-40 max-h-40 overflow-y-auto">
+                      {customers
+                        .filter(c =>
+                          c.name.toLowerCase().includes(customerSearch.toLowerCase()) ||
+                          c.phone.includes(customerSearch)
+                        )
+                        .map(c => (
+                          <li
+                            key={c.id}
+                            onMouseDown={() => {
+                              setNewOrder(prev => ({ ...prev, customer_name: c.name, customer_phone: c.phone }));
+                              setCustomerSearch(c.name);
+                              setShowCustomerList(false);
+                            }}
+                            className="px-3 py-2 text-sm text-slate-300 hover:bg-emerald-500/10 hover:text-emerald-300 cursor-pointer flex justify-between"
+                          >
+                            <span>{c.name}</span>
+                            <span className="text-xs text-slate-500" style={{ direction: 'ltr' }}>{c.phone}</span>
+                          </li>
+                        ))}
+                    </ul>
+                  )}
                 </div>
 
                 <div className="flex flex-col gap-1.5">

@@ -27,6 +27,7 @@ const menuItems = [
   { name: 'عمليات التشغيل', href: '/operations', icon: Activity },
   { name: 'أسطول السيارات', href: '/vehicles', icon: Car },
   { name: 'السائقين', href: '/drivers', icon: Users },
+  { name: 'العملاء المسجلين', href: '/customers', icon: Users },
   { name: 'المخالفات المرورية', href: '/violations', icon: FileText },
   { name: 'المصاريف والنثريات', href: '/expenses', icon: Receipt },
   { name: 'التقارير الحسابية', href: '/reports', icon: BarChart3 },

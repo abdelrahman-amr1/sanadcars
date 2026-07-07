@@ -39,3 +39,16 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# local data files - images, Excel, zip
+*.xlsx
+*.zip
+*_Images/
+*_Images-*/
+السيارات_Images/
+السائق_Images/
+
+# python scripts (local tools only)
+import_excel_data.py
+run_schema_migration.py
+*.py
