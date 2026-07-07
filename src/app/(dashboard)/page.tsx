@@ -169,30 +169,30 @@ export default function Dashboard() {
 
   const loadLiveSupabaseData = useCallback(async () => {
     if (!tenant) return;
-    const { data: vData } = await supabase.from('vehicles').select('*').eq('tenant_id', tenant.id);
-    const { data: dData } = await supabase.from('drivers').select('*').eq('tenant_id', tenant.id);
-    const { data: oData } = await supabase.from('operation_orders').select(`
-      *,
-      vehicle:vehicles(*),
-      driver:drivers(*)
-    `).eq('tenant_id', tenant.id).order('created_at', { ascending: false });
+    try {
+      const [vRes, dRes, oRes, eRes] = await Promise.all([
+        supabase.from('vehicles').select('*').eq('tenant_id', tenant.id),
+        supabase.from('drivers').select('*').eq('tenant_id', tenant.id),
+        supabase.from('operation_orders').select(`
+          *,
+          vehicle:vehicles(*),
+          driver:drivers(*)
+        `).eq('tenant_id', tenant.id).order('created_at', { ascending: false }),
+        supabase.from('expenses').select('*').eq('tenant_id', tenant.id)
+      ]);
 
-    if (vData) setVehicles(vData as Vehicle[]);
-    if (dData) setDrivers(dData as Driver[]);
-    if (oData) {
-      const ordersWithExpenses = await Promise.all(
-        oData.map(async (order: { id: string }) => {
-          const { data: expData } = await supabase
-            .from('expenses')
-            .select('*')
-            .eq('order_id', order.id);
-          return {
-            ...order,
-            expenses: expData || []
-          };
-        })
-      );
-      setOrders(ordersWithExpenses as OperationOrder[]);
+      if (vRes.data) setVehicles(vRes.data as Vehicle[]);
+      if (dRes.data) setDrivers(dRes.data as Driver[]);
+      if (oRes.data) {
+        const expensesData = eRes.data || [];
+        const ordersWithExpenses = oRes.data.map((order: any) => ({
+          ...order,
+          expenses: expensesData.filter((e: any) => e.order_id === order.id)
+        }));
+        setOrders(ordersWithExpenses as OperationOrder[]);
+      }
+    } catch (err) {
+      console.error('Error loading dashboard data:', err);
     }
   }, [tenant]);
 
