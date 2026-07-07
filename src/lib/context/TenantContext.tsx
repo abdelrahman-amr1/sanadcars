@@ -124,8 +124,8 @@ export function TenantProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (typeof window === 'undefined') return;
 
-    const color = tenant?.primary_color || 'emerald';
-    const isDark = tenant?.dark_mode !== false; // default true
+    const color = primaryColor;
+    const isDark = darkMode;
 
     // Toggle dark class on document element
     if (isDark) {
@@ -135,13 +135,13 @@ export function TenantProvider({ children }: { children: React.ReactNode }) {
     }
 
     // Color palettes mapping for styles overrides
-    const palettes: Record<string, { base: string; hover: string; light10: string; light20: string; border: string; from: string; to: string }> = {
-      emerald: { base: '#10b981', hover: '#059669', light10: '#10b9811a', light20: '#10b98133', border: '#10b98133', from: '#10b981', to: '#14b8a6' },
-      blue: { base: '#3b82f6', hover: '#2563eb', light10: '#3b82f61a', light20: '#3b82f633', border: '#3b82f633', from: '#3b82f6', to: '#06b6d4' },
-      rose: { base: '#f43f5e', hover: '#e11d48', light10: '#f43f5e1a', light20: '#f43f5e33', border: '#f43f5e33', from: '#f43f5e', to: '#ec4899' },
-      amber: { base: '#f59e0b', hover: '#d97706', light10: '#f59e0b1a', light20: '#f59e0b33', border: '#f59e0b33', from: '#f59e0b', to: '#f97316' },
-      indigo: { base: '#6366f1', hover: '#4f46e5', light10: '#6366f11a', light20: '#6366f133', border: '#6366f133', from: '#6366f1', to: '#a855f7' },
-      violet: { base: '#8b5cf6', hover: '#7c3aed', light10: '#8b5cf61a', light20: '#8b5cf633', border: '#8b5cf633', from: '#8b5cf6', to: '#ec4899' }
+    const palettes: Record<string, { base: string; hover: string; light: string; light10: string; light20: string; border: string; from: string; to: string }> = {
+      emerald: { base: '#10b981', hover: '#059669', light: '#34d399', light10: '#10b9811a', light20: '#10b98133', border: '#10b98133', from: '#10b981', to: '#14b8a6' },
+      blue: { base: '#3b82f6', hover: '#2563eb', light: '#60a5fa', light10: '#3b82f61a', light20: '#3b82f633', border: '#3b82f633', from: '#3b82f6', to: '#06b6d4' },
+      rose: { base: '#f43f5e', hover: '#e11d48', light: '#f472b6', light10: '#f43f5e1a', light20: '#f43f5e33', border: '#f43f5e33', from: '#f43f5e', to: '#ec4899' },
+      amber: { base: '#f59e0b', hover: '#d97706', light: '#fbbf24', light10: '#f59e0b1a', light20: '#f59e0b33', border: '#f59e0b33', from: '#f59e0b', to: '#f97316' },
+      indigo: { base: '#6366f1', hover: '#4f46e5', light: '#818cf8', light10: '#6366f11a', light20: '#6366f133', border: '#6366f133', from: '#6366f1', to: '#a855f7' },
+      violet: { base: '#8b5cf6', hover: '#7c3aed', light: '#a78bfa', light10: '#8b5cf61a', light20: '#8b5cf633', border: '#8b5cf633', from: '#8b5cf6', to: '#ec4899' }
     };
 
     const p = palettes[color] || palettes.emerald;
@@ -162,9 +162,16 @@ export function TenantProvider({ children }: { children: React.ReactNode }) {
         --tenant-primary-border: ${p.border};
         --tenant-primary-from: ${p.from};
         --tenant-primary-to: ${p.to};
+
+        /* Tailwind v4 core theme variables override */
+        --color-emerald-400: ${p.light} !important;
+        --color-emerald-500: ${p.base} !important;
+        --color-emerald-600: ${p.hover} !important;
+        --color-teal-400: ${p.to} !important;
+        --color-teal-500: ${p.to} !important;
       }
       
-      /* Override Tailwind v4 utility classes on-the-fly */
+      /* Override Tailwind utility classes on-the-fly */
       .text-emerald-500, .text-emerald-450 { color: var(--tenant-primary) !important; }
       .text-emerald-400 { color: var(--tenant-primary) !important; }
       .bg-emerald-500 { background-color: var(--tenant-primary) !important; }
@@ -181,7 +188,7 @@ export function TenantProvider({ children }: { children: React.ReactNode }) {
       .shadow-emerald-500\\/10 { box-shadow: 0 10px 15px -3px var(--tenant-primary-light-10), 0 4px 6px -4px var(--tenant-primary-light-10) !important; }
       .shadow-emerald-500\\/25 { box-shadow: 0 10px 15px -3px var(--tenant-primary-light-20), 0 4px 6px -4px var(--tenant-primary-light-20) !important; }
     `;
-  }, [tenant]);
+  }, [primaryColor, darkMode]);
 
   // Listen to Supabase Auth state changes
   useEffect(() => {
