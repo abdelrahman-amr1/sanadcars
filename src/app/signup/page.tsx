@@ -12,24 +12,17 @@ import Link from 'next/link';
 export default function SignupPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [companyName, setCompanyName] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
   const [loadingSubmit, setLoadingSubmit] = useState(false);
   const router = useRouter();
-  const { createTenant, setDemoMode } = useTenant();
+  const { setDemoMode } = useTenant();
 
   const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoadingSubmit(true);
     setErrorMsg('');
     setSuccessMsg('');
-
-    if (companyName.trim().length < 3) {
-      setErrorMsg('اسم الشركة يجب أن لا يقل عن 3 أحرف');
-      setLoadingSubmit(false);
-      return;
-    }
 
     try {
       // 1. Sign up user
@@ -51,24 +44,15 @@ export default function SignupPage() {
         // If session is active (auto-confirm enabled on Supabase)
         if (currentSession) {
           setDemoMode(false);
-          // Wait a brief moment for the auth state listener to update context
-          // then call createTenant
-          const tenantCreated = await createTenant(companyName);
-          if (tenantCreated) {
-            setSuccessMsg('تم تسجيل الحساب وتهيئة الشركة بنجاح!');
-            setTimeout(() => {
-              router.push('/');
-            }, 1500);
-          } else {
-            // If tenant creation failed for some reason, redirect to /setup-tenant onboarding
+          setSuccessMsg('تم تسجيل الحساب بنجاح! جاري تحويلك لتقديم طلب الانضمام...');
+          setTimeout(() => {
             router.push('/setup-tenant');
-          }
+          }, 1500);
         } else {
           // If email verification is required (default in some Supabase projects)
-          setSuccessMsg('تم إنشاء الحساب بنجاح! يرجى التحقق من بريدك الإلكتروني لتفعيل الحساب، ثم تسجيل الدخول لتهيئة شركتك.');
+          setSuccessMsg('تم إنشاء الحساب بنجاح! يرجى التحقق من بريدك الإلكتروني لتفعيل الحساب، ثم تسجيل الدخول لتقديم طلب الانضمام.');
           setEmail('');
           setPassword('');
-          setCompanyName('');
         }
       }
     } catch (err) {
@@ -85,16 +69,16 @@ export default function SignupPage() {
       <div className="absolute top-[-20%] left-[-20%] w-[60%] h-[60%] rounded-full bg-emerald-500/10 blur-[150px]" />
       <div className="absolute bottom-[-20%] right-[-20%] w-[60%] h-[60%] rounded-full bg-teal-500/10 blur-[150px]" />
 
-      <Card className="w-full max-w-md bg-slate-900/60 border-slate-800 backdrop-blur-xl shadow-2xl relative">
+      <Card className="w-full max-w-md bg-slate-900/60 border-slate-800 backdrop-blur-xl shadow-2xl relative text-right">
         <CardHeader className="text-center pt-8">
           <div className="mx-auto w-12 h-12 rounded-2xl bg-gradient-to-tr from-emerald-500 to-teal-400 flex items-center justify-center font-black text-slate-950 text-2xl shadow-lg shadow-emerald-500/25 mb-4">
-            FF
+            SC
           </div>
           <CardTitle className="text-2xl font-black text-slate-100 flex justify-center items-center gap-2">
-            إنشاء حساب SaaS جديد
+            إنشاء حساب جديد بالمنصة
           </CardTitle>
           <CardDescription className="text-slate-400 text-xs mt-1">
-            ابدأ فوراً بإدارة أسطول سياراتك الخاص وتفعيل قاعدة بياناتك السحابية المعزولة
+            سجل حسابك الآن لتتمكن من تقديم طلب الانضمام وتفعيل شركتك الخاصة
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-6 pb-8">
@@ -114,19 +98,6 @@ export default function SignupPage() {
 
           {!successMsg && (
             <form onSubmit={handleSignup} className="flex flex-col gap-4">
-              <div className="flex flex-col gap-1.5">
-                <label className="text-xs text-slate-400 font-semibold">اسم الشركة / المكتب</label>
-                <input
-                  required
-                  type="text"
-                  placeholder="مثال: شركة النخبة لتشغيل السيارات"
-                  value={companyName}
-                  onChange={(e) => setCompanyName(e.target.value)}
-                  className="bg-slate-950 border border-slate-850 rounded-lg px-3 py-2.5 text-sm text-slate-200 focus:outline-none focus:ring-1 focus:ring-emerald-500 placeholder:text-slate-700"
-                />
-                <span className="text-[10px] text-slate-500">سيتم إنشاء مساحة عمل مخصصة ومعزولة باسم شركتك.</span>
-              </div>
-
               <div className="flex flex-col gap-1.5">
                 <label className="text-xs text-slate-400 font-semibold">البريد الإلكتروني للطلب</label>
                 <input
