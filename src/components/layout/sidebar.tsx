@@ -20,7 +20,7 @@ import {
   Receipt,
   BarChart3
 } from 'lucide-react';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 
 const menuItems = [
   { name: 'لوحة التحكم', href: '/', icon: LayoutDashboard },
@@ -39,6 +39,18 @@ export function Sidebar() {
   const router = useRouter();
   const [isOpen, setIsOpen] = useState(true);
   const { user, tenant, isDemoMode, isSuperAdmin, logout } = useTenant();
+
+  useEffect(() => {
+    if (typeof window !== 'undefined' && window.innerWidth < 768) {
+      setIsOpen(false);
+    }
+  }, []);
+
+  const handleLinkClick = () => {
+    if (typeof window !== 'undefined' && window.innerWidth < 768) {
+      setIsOpen(false);
+    }
+  };
 
   const handleAuthAction = () => {
     if (user) {
@@ -111,6 +123,7 @@ export function Sidebar() {
                 <Link
                   key={item.href}
                   href={item.href}
+                  onClick={handleLinkClick}
                   className={cn(
                     "flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all group relative",
                     isActive
@@ -135,6 +148,7 @@ export function Sidebar() {
             {isSuperAdmin && (
               <Link
                 href="/admin"
+                onClick={handleLinkClick}
                 className={cn(
                   "flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all group relative mt-4 border border-rose-500/10 bg-rose-500/5 text-rose-450 hover:bg-rose-500/10",
                   pathname === '/admin' && "bg-rose-500/10 border-rose-500/20 text-rose-400"
