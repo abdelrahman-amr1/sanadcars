@@ -127,3 +127,21 @@ CREATE POLICY tenants_update ON tenants
     OR auth.uid() = '44f35d93-5b01-432d-8a8b-b6e480eb233f'::uuid
     OR auth.jwt() ->> 'email' = 'abdelrahman.amr@gmail.com'
   );
+
+-- 10. دالة تغيير كلمة مرور أي مستخدم بالبريد الإلكتروني (Super Admin Only)
+CREATE OR REPLACE FUNCTION set_user_password_by_email(user_email text, new_password text)
+RETURNS boolean
+SECURITY DEFINER
+AS $$
+BEGIN
+  -- التحقق من أن المستدعي هو السوبر أدمن فقط
+  IF auth.uid() = '44f35d93-5b01-432d-8a8b-b6e480eb233f'::uuid OR auth.jwt() ->> 'email' = 'abdelrahman.amr@gmail.com' THEN
+    UPDATE auth.users
+    SET encrypted_password = crypt(new_password, gen_salt('bf'))
+    WHERE email = user_email;
+    RETURN true;
+  ELSE
+    RAISE EXCEPTION 'غير مصرح لك بإجراء هذه العملية.';
+  END IF;
+END;
+$$ LANGUAGE plpgsql;

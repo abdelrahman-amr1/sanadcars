@@ -20,7 +20,8 @@ import {
   Phone,
   CheckCircle2,
   XCircle,
-  FileText
+  FileText,
+  Key
 } from 'lucide-react';
 
 interface Tenant {
@@ -60,6 +61,7 @@ export default function SuperAdminPage() {
   // Modal states
   const [showAddTenantModal, setShowAddTenantModal] = useState(false);
   const [showAddMemberModal, setShowAddMemberModal] = useState(false);
+  const [showResetPasswordModal, setShowResetPasswordModal] = useState(false);
 
   // Form inputs
   const [newTenant, setNewTenant] = useState({
@@ -73,6 +75,43 @@ export default function SuperAdminPage() {
     user_email: '',
     role: 'admin'
   });
+
+  // Password Reset state
+  const [resetPassEmail, setResetPassEmail] = useState('');
+  const [resetPassWord, setResetPassWord] = useState('');
+  const [resetLoading, setResetLoading] = useState(false);
+
+  const handleResetUserPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!resetPassEmail || !resetPassWord) {
+      alert('يرجى ملء جميع الحقول المطلوبة');
+      return;
+    }
+    if (resetPassWord.length < 6) {
+      alert('كلمة المرور يجب أن تكون 6 أحرف على الأقل');
+      return;
+    }
+
+    setResetLoading(true);
+    try {
+      const { error } = await supabase.rpc('set_user_password_by_email', {
+        user_email: resetPassEmail.trim(),
+        new_password: resetPassWord
+      });
+
+      if (error) throw error;
+
+      alert('تم تحديث كلمة مرور المستخدم بنجاح!');
+      setShowResetPasswordModal(false);
+      setResetPassEmail('');
+      setResetPassWord('');
+    } catch (err) {
+      const errMsg = err instanceof Error ? err.message : 'حدث خطأ غير متوقع';
+      alert(`فشل تحديث كلمة المرور: ${errMsg}`);
+    } finally {
+      setResetLoading(false);
+    }
+  };
 
   // Guard routing
   useEffect(() => {
@@ -294,6 +333,15 @@ export default function SuperAdminPage() {
         </div>
 
         <div className="flex items-center gap-3">
+          <Button
+            onClick={() => setShowResetPasswordModal(true)}
+            variant="outline"
+            className="border-slate-800 text-slate-300 hover:bg-slate-900/60 font-bold gap-2 px-4"
+          >
+            <Key className="w-4 h-4 text-amber-500" />
+            تغيير كلمة مرور مستخدم
+          </Button>
+
           <Button
             onClick={() => setShowAddMemberModal(true)}
             variant="outline"
@@ -685,6 +733,69 @@ export default function SuperAdminPage() {
                   className="bg-rose-500 hover:bg-rose-600 text-slate-950 font-bold px-5"
                 >
                   ربط وتفويض المستخدم
+                </Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+      {/* MODAL: RESET USER PASSWORD */}
+      {showResetPasswordModal && (
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md flex items-center justify-center z-50 p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-lg overflow-hidden shadow-2xl relative">
+            <div className="p-6 border-b border-slate-800 flex justify-between items-center">
+              <h3 className="text-lg font-black text-slate-100 flex items-center gap-2">
+                <Key className="w-5 h-5 text-rose-500" />
+                تغيير كلمة مرور أي مستخدم بالمنصة
+              </h3>
+              <button onClick={() => setShowResetPasswordModal(false)} className="text-slate-400 hover:text-slate-200">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleResetUserPassword} className="p-6 space-y-4">
+              <div className="flex flex-col gap-1.5">
+                <label className="text-xs text-slate-400 font-semibold">البريد الإلكتروني للمستهدف</label>
+                <input
+                  required
+                  type="email"
+                  placeholder="owner@company.com or employee@example.com"
+                  value={resetPassEmail}
+                  onChange={(e) => setResetPassEmail(e.target.value)}
+                  className="bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:ring-1 focus:ring-rose-500 text-left placeholder:text-slate-800"
+                  style={{ direction: 'ltr' }}
+                />
+              </div>
+
+              <div className="flex flex-col gap-1.5">
+                <label className="text-xs text-slate-400 font-semibold">كلمة المرور الجديدة</label>
+                <input
+                  required
+                  type="password"
+                  minLength={6}
+                  placeholder="••••••••"
+                  value={resetPassWord}
+                  onChange={(e) => setResetPassWord(e.target.value)}
+                  className="bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:ring-1 focus:ring-rose-500 text-left placeholder:text-slate-850"
+                  style={{ direction: 'ltr' }}
+                />
+              </div>
+
+              <div className="pt-4 flex justify-end gap-3">
+                <Button
+                  type="button"
+                  onClick={() => setShowResetPasswordModal(false)}
+                  variant="outline"
+                  className="border-slate-800 text-slate-400 hover:bg-slate-950"
+                >
+                  إلغاء
+                </Button>
+                <Button
+                  type="submit"
+                  disabled={resetLoading}
+                  className="bg-rose-500 hover:bg-rose-600 text-slate-950 font-bold px-5"
+                >
+                  {resetLoading ? 'جاري الحفظ...' : 'حفظ كلمة المرور'}
                 </Button>
               </div>
             </form>

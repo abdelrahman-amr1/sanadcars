@@ -58,6 +58,37 @@ export default function SettingsPage() {
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
   const [auditLoading, setAuditLoading] = useState(false);
 
+  // Change password states
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [passwordLoading, setPasswordLoading] = useState(false);
+
+  const handleUpdatePassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (newPassword.length < 6) {
+      alert('كلمة المرور الجديدة يجب أن تكون 6 أحرف على الأقل');
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      alert('كلمتا المرور غير متطابقتين');
+      return;
+    }
+
+    setPasswordLoading(true);
+    try {
+      const { error } = await supabase.auth.updateUser({ password: newPassword });
+      if (error) throw error;
+      alert('تم تحديث كلمة المرور الخاصة بك بنجاح!');
+      setNewPassword('');
+      setConfirmPassword('');
+    } catch (err) {
+      const errMsg = err instanceof Error ? err.message : 'فشل تحديث كلمة المرور';
+      alert(`خطأ: ${errMsg}`);
+    } finally {
+      setPasswordLoading(false);
+    }
+  };
+
   // Sync settings state from active tenant
   useEffect(() => {
     if (tenant) {
@@ -301,106 +332,161 @@ export default function SettingsPage() {
 
       {/* TAB CONTENT: GENERAL & CUSTOMIZATION */}
       {activeTab === 'general' && (
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <Card className="md:col-span-2 bg-slate-900/60 border-slate-800 backdrop-blur-lg">
-            <CardHeader>
-              <CardTitle className="text-base font-black text-slate-100">ألوان المنصة وموضوع العرض</CardTitle>
-              <CardDescription className="text-slate-400 text-xs">
-                خصص لون الواجهة الرئيسي ليعبر عن الهوية البصرية الخاصة بشركتك
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              {/* Color Select */}
-              <div className="space-y-3">
-                <label className="text-xs text-slate-400 font-bold">اللون الرئيسي للشركة</label>
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                  {[
-                    { id: 'emerald', name: 'الأخضر الزمردي', hex: '#10b981' },
-                    { id: 'blue', name: 'الأزرق الملكي', hex: '#3b82f6' },
-                    { id: 'rose', name: 'الأحمر الياقوتي', hex: '#f43f5e' },
-                    { id: 'amber', name: 'الذهبي / البرتقالي', hex: '#f59e0b' },
-                    { id: 'indigo', name: 'النيلي الداكن', hex: '#6366f1' },
-                    { id: 'violet', name: 'البنفسجي الإمبراطوري', hex: '#8b5cf6' }
-                  ].map((c) => (
-                    <button
-                      key={c.id}
-                      onClick={() => handleColorChange(c.id)}
-                      className={`flex items-center gap-2.5 p-3 rounded-xl border text-right transition-all ${
-                        themeColor === c.id
-                          ? 'border-emerald-500 bg-emerald-500/10 text-slate-100 shadow-md'
-                          : 'border-slate-800 bg-slate-950/40 text-slate-400 hover:border-slate-700'
-                      }`}
-                    >
-                      <span className="w-4.5 h-4.5 rounded-full shrink-0" style={{ backgroundColor: c.hex }} />
-                      <span className="text-xs font-semibold">{c.name}</span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Dark mode toggle */}
-              <div className="flex items-center justify-between border-t border-slate-800 pt-5">
-                <div className="space-y-1">
-                  <h4 className="text-xs font-bold text-slate-200">الوضع الداكن (Dark Mode)</h4>
-                  <p className="text-[10px] text-slate-500">تفعيل خلفية العرض الليلية المريحة للعين</p>
-                </div>
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => handleDarkModeChange(true)}
-                    className={`p-2 rounded-lg border transition-all ${
-                      darkMode
-                        ? 'bg-emerald-500/10 border-emerald-500 text-emerald-500'
-                        : 'border-slate-800 text-slate-500 hover:text-slate-300'
-                    }`}
-                  >
-                    <Moon className="w-5 h-5" />
-                  </button>
-                  <button
-                    onClick={() => handleDarkModeChange(false)}
-                    className={`p-2 rounded-lg border transition-all ${
-                      !darkMode
-                        ? 'bg-emerald-500/10 border-emerald-500 text-emerald-500'
-                        : 'border-slate-800 text-slate-500 hover:text-slate-300'
-                    }`}
-                  >
-                    <Sun className="w-5 h-5" />
-                  </button>
-                </div>
-              </div>
-
-              <div className="pt-4 border-t border-slate-800 flex justify-end">
-                <Button
-                  onClick={handleSaveGeneral}
-                  disabled={loading}
-                  className="bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-black px-8"
-                >
-                  {loading ? 'جاري الحفظ...' : 'حفظ الإعدادات'}
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Theme Preview Card */}
-          <Card className="bg-slate-900/60 border-slate-800 backdrop-blur-lg flex flex-col justify-between">
-            <CardHeader>
-              <CardTitle className="text-sm font-black text-slate-300">معاينة مباشرة لمكتبك</CardTitle>
-            </CardHeader>
-            <CardContent className="flex-1 flex flex-col items-center justify-center py-8">
-              <div className="w-full max-w-[200px] bg-slate-950 border border-slate-850 rounded-2xl p-4 shadow-xl space-y-4">
-                <div className="flex justify-between items-center">
-                  <span className="text-[9px] text-slate-500 font-bold">اسم الفرع</span>
-                  <span className="text-[10px] text-slate-200 font-black">{tenant?.name || 'شركة السيارات'}</span>
-                </div>
-                <div className="h-2.5 rounded bg-slate-900 w-full" />
-                <div className="h-6 rounded-lg bg-emerald-500 text-slate-950 text-[10px] font-bold flex items-center justify-center shadow-lg shadow-emerald-500/10">
-                  زر تجريبي نشط
-                </div>
-                <div className="flex gap-2">
-                  <div className="w-full h-8 rounded-lg border border-emerald-500/20 bg-emerald-500/10 text-emerald-500 text-[9px] font-bold flex items-center justify-center">
-                    تقارير حية
+        <div className="space-y-6">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <Card className="md:col-span-2 bg-slate-900/60 border-slate-800 backdrop-blur-lg">
+              <CardHeader>
+                <CardTitle className="text-base font-black text-slate-100">ألوان المنصة وموضوع العرض</CardTitle>
+                <CardDescription className="text-slate-400 text-xs">
+                  خصص لون الواجهة الرئيسي ليعبر عن الهوية البصرية الخاصة بشركتك
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                {/* Color Select */}
+                <div className="space-y-3">
+                  <label className="text-xs text-slate-400 font-bold">اللون الرئيسي للشركة</label>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                    {[
+                      { id: 'emerald', name: 'الأخضر الزمردي', hex: '#10b981' },
+                      { id: 'blue', name: 'الأزرق الملكي', hex: '#3b82f6' },
+                      { id: 'rose', name: 'الأحمر الياقوتي', hex: '#f43f5e' },
+                      { id: 'amber', name: 'الذهبي / البرتقالي', hex: '#f59e0b' },
+                      { id: 'indigo', name: 'النيلي الداكن', hex: '#6366f1' },
+                      { id: 'violet', name: 'البنفسجي الإمبراطوري', hex: '#8b5cf6' }
+                    ].map((c) => (
+                      <button
+                        key={c.id}
+                        onClick={() => handleColorChange(c.id)}
+                        className={`flex items-center gap-2.5 p-3 rounded-xl border text-right transition-all ${
+                          themeColor === c.id
+                            ? 'border-emerald-500 bg-emerald-500/10 text-slate-100 shadow-md'
+                            : 'border-slate-800 bg-slate-950/40 text-slate-400 hover:border-slate-700'
+                        }`}
+                      >
+                        <span className="w-4.5 h-4.5 rounded-full shrink-0" style={{ backgroundColor: c.hex }} />
+                        <span className="text-xs font-semibold">{c.name}</span>
+                      </button>
+                    ))}
                   </div>
                 </div>
-              </div>
+
+                {/* Dark mode toggle */}
+                <div className="flex items-center justify-between border-t border-slate-800 pt-5">
+                  <div className="space-y-1">
+                    <h4 className="text-xs font-bold text-slate-200">الوضع الداكن (Dark Mode)</h4>
+                    <p className="text-[10px] text-slate-500">تفعيل خلفية العرض الليلية المريحة للعين</p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => handleDarkModeChange(true)}
+                      className={`p-2 rounded-lg border transition-all ${
+                        darkMode
+                          ? 'bg-emerald-500/10 border-emerald-500 text-emerald-500'
+                          : 'border-slate-800 text-slate-500 hover:text-slate-300'
+                      }`}
+                    >
+                      <Moon className="w-5 h-5" />
+                    </button>
+                    <button
+                      onClick={() => handleDarkModeChange(false)}
+                      className={`p-2 rounded-lg border transition-all ${
+                        !darkMode
+                          ? 'bg-emerald-500/10 border-emerald-500 text-emerald-500'
+                          : 'border-slate-800 text-slate-500 hover:text-slate-300'
+                      }`}
+                    >
+                      <Sun className="w-5 h-5" />
+                    </button>
+                  </div>
+                </div>
+
+                <div className="pt-4 border-t border-slate-800 flex justify-end">
+                  <Button
+                    onClick={handleSaveGeneral}
+                    disabled={loading}
+                    className="bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-black px-8"
+                  >
+                    {loading ? 'جاري الحفظ...' : 'حفظ الإعدادات'}
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Theme Preview Card */}
+            <Card className="bg-slate-900/60 border-slate-800 backdrop-blur-lg flex flex-col justify-between">
+              <CardHeader>
+                <CardTitle className="text-sm font-black text-slate-300">معاينة مباشرة لمكتبك</CardTitle>
+              </CardHeader>
+              <CardContent className="flex-1 flex flex-col items-center justify-center py-8">
+                <div className="w-full max-w-[200px] bg-slate-950 border border-slate-850 rounded-2xl p-4 shadow-xl space-y-4">
+                  <div className="flex justify-between items-center">
+                    <span className="text-[9px] text-slate-500 font-bold">اسم الفرع</span>
+                    <span className="text-[10px] text-slate-200 font-black">{tenant?.name || 'شركة السيارات'}</span>
+                  </div>
+                  <div className="h-2.5 rounded bg-slate-900 w-full" />
+                  <div className="h-6 rounded-lg bg-emerald-500 text-slate-950 text-[10px] font-bold flex items-center justify-center shadow-lg shadow-emerald-500/10">
+                    زر تجريبي نشط
+                  </div>
+                  <div className="flex gap-2">
+                    <div className="w-full h-8 rounded-lg border border-emerald-500/20 bg-emerald-500/10 text-emerald-500 text-[9px] font-bold flex items-center justify-center">
+                      تقارير حية
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* PASSWORD CHANGE FORM */}
+          <Card className="bg-slate-900/60 border-slate-800 backdrop-blur-lg max-w-2xl">
+            <CardHeader>
+              <CardTitle className="text-base font-black text-slate-100">أمان الحساب وتغيير كلمة المرور</CardTitle>
+              <CardDescription className="text-slate-400 text-xs">
+                تحديث كلمة المرور الحالية لحماية صلاحيات الدخول الخاصة بمدير الكيان
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <form onSubmit={handleUpdatePassword} className="space-y-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-xs text-slate-400 font-bold">كلمة المرور الجديدة</label>
+                    <input
+                      required
+                      type="password"
+                      minLength={6}
+                      placeholder="••••••••"
+                      value={newPassword}
+                      onChange={(e) => setNewPassword(e.target.value)}
+                      className="bg-slate-950 border border-slate-850 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:ring-1 focus:ring-emerald-500 text-left placeholder:text-slate-800"
+                      style={{ direction: 'ltr' }}
+                    />
+                  </div>
+
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-xs text-slate-400 font-bold">تأكيد كلمة المرور</label>
+                    <input
+                      required
+                      type="password"
+                      minLength={6}
+                      placeholder="••••••••"
+                      value={confirmPassword}
+                      onChange={(e) => setConfirmPassword(e.target.value)}
+                      className="bg-slate-950 border border-slate-850 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:ring-1 focus:ring-emerald-500 text-left placeholder:text-slate-800"
+                      style={{ direction: 'ltr' }}
+                    />
+                  </div>
+                </div>
+
+                <div className="pt-2 flex justify-end">
+                  <Button
+                    type="submit"
+                    disabled={passwordLoading}
+                    className="bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-black px-6"
+                  >
+                    {passwordLoading ? 'جاري التحديث...' : 'تحديث كلمة المرور'}
+                  </Button>
+                </div>
+              </form>
             </CardContent>
           </Card>
         </div>
