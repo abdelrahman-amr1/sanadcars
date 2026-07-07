@@ -62,13 +62,13 @@ export default function SuperAdminPage() {
   // Form inputs
   const [newTenant, setNewTenant] = useState({
     name: '',
-    owner_id: '',
+    owner_email: '',
     subscription_plan: 'free'
   });
 
   const [newMember, setNewMember] = useState({
     tenant_id: '',
-    user_id: '',
+    user_email: '',
     role: 'admin'
   });
 
@@ -113,18 +113,27 @@ export default function SuperAdminPage() {
   // Handlers
   const handleCreateTenant = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newTenant.name || !newTenant.owner_id) {
+    if (!newTenant.name || !newTenant.owner_email) {
       alert('يرجى ملء جميع الحقول المطلوبة');
       return;
     }
 
     try {
+      // Resolve email to UUID
+      const { data: resolvedUid, error: rpcError } = await supabase
+        .rpc('get_user_id_by_email', { email_address: newTenant.owner_email.trim() });
+
+      if (rpcError || !resolvedUid) {
+        alert('فشل العثور على هذا البريد الإلكتروني للمالك. تأكد من أن المستخدم قام بالتسجيل أولاً.');
+        return;
+      }
+
       // Create Tenant
       const { data: createdTenant, error: tError } = await supabase
         .from('tenants')
         .insert({
           name: newTenant.name,
-          owner_id: newTenant.owner_id,
+          owner_id: resolvedUid,
           subscription_plan: newTenant.subscription_plan
         })
         .select()
@@ -137,7 +146,7 @@ export default function SuperAdminPage() {
         .from('tenant_members')
         .upsert({
           tenant_id: createdTenant.id,
-          user_id: newTenant.owner_id,
+          user_id: resolvedUid,
           role: 'owner'
         });
 
@@ -145,7 +154,7 @@ export default function SuperAdminPage() {
 
       alert('تم إنشاء المكتب وتعيين المالك بنجاح!');
       setShowAddTenantModal(false);
-      setNewTenant({ name: '', owner_id: '', subscription_plan: 'free' });
+      setNewTenant({ name: '', owner_email: '', subscription_plan: 'free' });
       loadPlatformData();
     } catch (err) {
       const errMsg = err instanceof Error ? err.message : 'حدث خطأ غير متوقع';
@@ -155,17 +164,26 @@ export default function SuperAdminPage() {
 
   const handleCreateMember = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newMember.tenant_id || !newMember.user_id) {
+    if (!newMember.tenant_id || !newMember.user_email) {
       alert('يرجى ملء جميع الحقول المطلوبة');
       return;
     }
 
     try {
+      // Resolve email to UUID
+      const { data: resolvedUid, error: rpcError } = await supabase
+        .rpc('get_user_id_by_email', { email_address: newMember.user_email.trim() });
+
+      if (rpcError || !resolvedUid) {
+        alert('فشل العثور على البريد الإلكتروني للمستخدم. تأكد من تسجيله بالمنصة أولاً.');
+        return;
+      }
+
       const { error } = await supabase
         .from('tenant_members')
         .upsert({
           tenant_id: newMember.tenant_id,
-          user_id: newMember.user_id,
+          user_id: resolvedUid,
           role: newMember.role
         });
 
@@ -173,7 +191,7 @@ export default function SuperAdminPage() {
 
       alert('تم ربط المستخدم بالمكتب بنجاح!');
       setShowAddMemberModal(false);
-      setNewMember({ tenant_id: '', user_id: '', role: 'admin' });
+      setNewMember({ tenant_id: '', user_email: '', role: 'admin' });
       loadPlatformData();
     } catch (err) {
       const errMsg = err instanceof Error ? err.message : 'حدث خطأ غير متوقع';
@@ -532,19 +550,19 @@ export default function SuperAdminPage() {
               </div>
 
               <div className="flex flex-col gap-1.5">
-                <label className="text-xs text-slate-400 font-semibold">معرّف المالك (User UUID في Supabase)</label>
+                <label className="text-xs text-slate-400 font-semibold">البريد الإلكتروني للمالك</label>
                 <input
                   required
-                  type="text"
-                  placeholder="أدخل UUID للمستخدم"
-                  value={newTenant.owner_id}
-                  onChange={(e) => setNewTenant(prev => ({ ...prev, owner_id: e.target.value }))}
-                  className="bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:ring-1 focus:ring-rose-500 placeholder:text-slate-700 font-mono text-left"
+                  type="email"
+                  placeholder="مثال: owner@company.com"
+                  value={newTenant.owner_email}
+                  onChange={(e) => setNewTenant(prev => ({ ...prev, owner_email: e.target.value }))}
+                  className="bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:ring-1 focus:ring-rose-500 placeholder:text-slate-700 text-left"
                   style={{ direction: 'ltr' }}
                 />
                 <p className="text-[10px] text-slate-500 flex items-center gap-1">
                   <Info className="w-3 h-3" />
-                  يجب أن يكون المستخدم قد قام بالتسجيل أولاً من صفحة التسجيل
+                  يجب أن يكون المستخدم قد قام بالتسجيل أولاً بالبريد الإلكتروني
                 </p>
               </div>
 
@@ -613,14 +631,14 @@ export default function SuperAdminPage() {
               </div>
 
               <div className="flex flex-col gap-1.5">
-                <label className="text-xs text-slate-400 font-semibold">معرّف العضو (User UUID في Supabase)</label>
+                <label className="text-xs text-slate-400 font-semibold">البريد الإلكتروني للمستخدم</label>
                 <input
                   required
-                  type="text"
-                  placeholder="أدخل UUID للمستخدم"
-                  value={newMember.user_id}
-                  onChange={(e) => setNewMember(prev => ({ ...prev, user_id: e.target.value }))}
-                  className="bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:ring-1 focus:ring-rose-500 placeholder:text-slate-700 font-mono text-left"
+                  type="email"
+                  placeholder="مثال: manager@company.com"
+                  value={newMember.user_email}
+                  onChange={(e) => setNewMember(prev => ({ ...prev, user_email: e.target.value }))}
+                  className="bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:ring-1 focus:ring-rose-500 placeholder:text-slate-700 text-left"
                   style={{ direction: 'ltr' }}
                 />
               </div>
