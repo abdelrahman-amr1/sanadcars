@@ -16,7 +16,8 @@ import {
   ChevronLeft,
   Menu,
   ShieldCheck,
-  Settings
+  Settings,
+  Receipt
 } from 'lucide-react';
 import { useState } from 'react';
 
@@ -26,6 +27,7 @@ const menuItems = [
   { name: 'أسطول السيارات', href: '/vehicles', icon: Car },
   { name: 'السائقين', href: '/drivers', icon: Users },
   { name: 'المخالفات المرورية', href: '/violations', icon: FileText },
+  { name: 'المصاريف والنثريات', href: '/expenses', icon: Receipt },
   { name: 'الصيانة والعدادات', href: '/maintenance', icon: Wrench },
   { name: 'الإعدادات والسمات', href: '/settings', icon: Settings },
 ];

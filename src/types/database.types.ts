@@ -200,7 +200,7 @@ export interface Database {
         Row: {
           id: string;
           tenant_id: string;
-          order_id: string;
+          order_id: string | null;
           amount: number;
           category: 'fuel' | 'toll' | 'parking' | 'cleaning' | 'other';
           description: string | null;
@@ -209,7 +209,7 @@ export interface Database {
         Insert: {
           id?: string;
           tenant_id: string;
-          order_id: string;
+          order_id?: string | null;
           amount: number;
           category: 'fuel' | 'toll' | 'parking' | 'cleaning' | 'other';
           description?: string | null;
@@ -218,7 +218,7 @@ export interface Database {
         Update: {
           id?: string;
           tenant_id?: string;
-          order_id?: string;
+          order_id?: string | null;
           amount?: number;
           category?: 'fuel' | 'toll' | 'parking' | 'cleaning' | 'other';
           description?: string | null;

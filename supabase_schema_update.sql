@@ -145,3 +145,6 @@ BEGIN
   END IF;
 END;
 $$ LANGUAGE plpgsql;
+
+-- 11. السماح للمصاريف بألا تكون مرتبطة بعقد محدد (للمصاريف الإدارية العامة للمكتب)
+ALTER TABLE expenses ALTER COLUMN order_id DROP NOT NULL;
