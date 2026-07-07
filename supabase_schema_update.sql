@@ -5,6 +5,7 @@ CREATE TABLE IF NOT EXISTS tenant_requests (
   full_name text NOT NULL,
   email text NOT NULL,
   phone text NOT NULL,
+  currency text DEFAULT 'SAR',
   status text DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'rejected')),
   user_id uuid REFERENCES auth.users(id) ON DELETE CASCADE,
   created_at timestamp with time zone DEFAULT timezone('utc'::text, now()) NOT NULL
@@ -23,9 +24,11 @@ CREATE TABLE IF NOT EXISTS audit_logs (
   created_at timestamp with time zone DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
--- 3. إضافة أعمدة ألوان المظهر والوضع الداكن لجدول المكاتب
+-- 3. إضافة أعمدة ألوان المظهر والوضع الداكن لجدول المكاتب والعملة
 ALTER TABLE tenants ADD COLUMN IF NOT EXISTS primary_color text DEFAULT 'emerald';
 ALTER TABLE tenants ADD COLUMN IF NOT EXISTS dark_mode boolean DEFAULT true;
+ALTER TABLE tenants ADD COLUMN IF NOT EXISTS currency text DEFAULT 'SAR';
+ALTER TABLE tenant_requests ADD COLUMN IF NOT EXISTS currency text DEFAULT 'SAR';
 
 -- 4. تفعيل RLS على الجداول الجديدة للحماية
 ALTER TABLE tenant_requests ENABLE ROW LEVEL SECURITY;

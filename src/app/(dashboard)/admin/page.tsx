@@ -28,6 +28,7 @@ interface Tenant {
   name: string;
   subscription_plan: string;
   owner_id: string;
+  currency?: string;
   created_at: string;
 }
 
@@ -37,6 +38,7 @@ interface TenantRequest {
   full_name: string;
   email: string;
   phone: string;
+  currency?: string;
   status: 'pending' | 'approved' | 'rejected';
   user_id: string;
   created_at: string;
@@ -210,7 +212,8 @@ export default function SuperAdminPage() {
         .insert({
           name: req.company_name,
           owner_id: req.user_id,
-          subscription_plan: 'free'
+          subscription_plan: 'free',
+          currency: req.currency || 'SAR'
         })
         .select()
         .single();
@@ -407,6 +410,7 @@ export default function SuperAdminPage() {
                       <th className="pb-3 pt-2 px-4 font-bold">الاسم الكامل لمدير الطلب</th>
                       <th className="pb-3 pt-2 px-4 font-bold">رقم الجوال</th>
                       <th className="pb-3 pt-2 px-4 font-bold">البريد الإلكتروني</th>
+                      <th className="pb-3 pt-2 px-4 font-bold">العملة</th>
                       <th className="pb-3 pt-2 px-4 font-bold">حالة الطلب</th>
                       <th className="pb-3 pt-2 px-4 font-bold text-center">إجراء تفعيل المكتب</th>
                     </tr>
@@ -421,6 +425,11 @@ export default function SuperAdminPage() {
                           {req.phone}
                         </td>
                         <td className="py-4 px-4 font-mono text-xs text-slate-400">{req.email}</td>
+                        <td className="py-4 px-4">
+                          <span className="font-bold text-xs uppercase text-slate-350 bg-slate-950/60 px-2 py-1 rounded border border-slate-850">
+                            {req.currency || 'SAR'}
+                          </span>
+                        </td>
                         <td className="py-4 px-4">
                           <span
                             className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
@@ -491,6 +500,7 @@ export default function SuperAdminPage() {
                       <th className="pb-3 pt-2 px-4 font-bold">معرّف المكتب (UUID)</th>
                       <th className="pb-3 pt-2 px-4 font-bold">معرّف المالك</th>
                       <th className="pb-3 pt-2 px-4 font-bold">الخطة</th>
+                      <th className="pb-3 pt-2 px-4 font-bold">العملة</th>
                       <th className="pb-3 pt-2 px-4 font-bold">تاريخ الإنشاء</th>
                     </tr>
                   </thead>
@@ -504,6 +514,11 @@ export default function SuperAdminPage() {
                           <Badge className="bg-emerald-500/10 text-emerald-450 border-emerald-500/20 capitalize font-bold">
                             {t.subscription_plan === 'free' ? 'مجانية' : t.subscription_plan}
                           </Badge>
+                        </td>
+                        <td className="py-4 px-4">
+                          <span className="font-bold text-xs uppercase text-slate-350 bg-slate-950/60 px-2 py-1 rounded border border-slate-850">
+                            {t.currency || 'SAR'}
+                          </span>
                         </td>
                         <td className="py-4 px-4 text-xs text-slate-400">
                           {new Date(t.created_at).toLocaleDateString('ar-EG', {

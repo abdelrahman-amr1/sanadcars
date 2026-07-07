@@ -9,6 +9,7 @@ import { User } from '@supabase/supabase-js';
 export type Tenant = Database['public']['Tables']['tenants']['Row'] & {
   primary_color?: string;
   dark_mode?: boolean;
+  currency?: string;
 };
 
 export interface TenantRequest {
@@ -17,6 +18,7 @@ export interface TenantRequest {
   full_name: string;
   email: string;
   phone: string;
+  currency?: string;
   status: 'pending' | 'approved' | 'rejected';
   user_id: string;
   created_at: string;
@@ -39,7 +41,7 @@ interface TenantContextType {
   logout: () => Promise<void>;
   refreshTenant: () => Promise<void>;
   createTenant: (name: string) => Promise<Tenant | null>;
-  submitJoinRequest: (companyName: string, fullName: string, phone: string) => Promise<TenantRequest | null>;
+  submitJoinRequest: (companyName: string, fullName: string, phone: string, currency: string) => Promise<TenantRequest | null>;
 }
 
 const TenantContext = createContext<TenantContextType | undefined>(undefined);
@@ -299,7 +301,7 @@ export function TenantProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const submitJoinRequest = async (companyName: string, fullName: string, phone: string): Promise<TenantRequest | null> => {
+  const submitJoinRequest = async (companyName: string, fullName: string, phone: string, currency: string): Promise<TenantRequest | null> => {
     if (!user) return null;
     setLoading(true);
     try {
@@ -310,6 +312,7 @@ export function TenantProvider({ children }: { children: React.ReactNode }) {
           full_name: fullName,
           email: user.email || '',
           phone,
+          currency,
           user_id: user.id
         })
         .select()

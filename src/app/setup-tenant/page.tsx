@@ -11,10 +11,45 @@ export default function SetupTenantPage() {
   const { user, tenant, joinRequest, loading, submitJoinRequest, logout, needsOnboarding } = useTenant();
   const [companyName, setCompanyName] = useState('');
   const [fullName, setFullName] = useState('');
+  const [countryCode, setCountryCode] = useState('+966');
   const [phone, setPhone] = useState('');
+  const [currency, setCurrency] = useState('SAR');
   const [loadingSubmit, setLoadingSubmit] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
   const router = useRouter();
+
+  const countries = [
+    { code: '+966', flag: '🇸🇦', name: 'السعودية' },
+    { code: '+20', flag: '🇪🇬', name: 'مصر' },
+    { code: '+971', flag: '🇦🇪', name: 'الإمارات' },
+    { code: '+974', flag: '🇶🇦', name: 'قطر' },
+    { code: '+965', flag: '🇰🇼', name: 'الكويت' },
+    { code: '+968', flag: '🇴🇲', name: 'عمان' },
+    { code: '+973', flag: '🇧🇭', name: 'البحرين' },
+    { code: '+962', flag: '🇯🇴', name: 'الأردن' },
+    { code: '+961', flag: '🇱🇧', name: 'لبنان' },
+    { code: '+964', flag: '🇮🇶', name: 'العراق' },
+    { code: '+963', flag: '🇸🇾', name: 'سوريا' },
+    { code: '+967', flag: '🇾🇪', name: 'اليمن' },
+    { code: '+218', flag: '🇱🇾', name: 'ليبيا' },
+    { code: '+249', flag: '🇸🇩', name: 'السودان' },
+    { code: '+212', flag: '🇲🇦', name: 'المغرب' },
+    { code: '+213', flag: '🇩🇿', name: 'الجزائر' },
+    { code: '+216', flag: '🇹🇳', name: 'تونس' }
+  ];
+
+  const currencies = [
+    { code: 'SAR', label: '﷼ - ريال سعودي' },
+    { code: 'AED', label: 'د.إ - درهم إماراتي' },
+    { code: 'EGP', label: 'ج.م - جنيه مصري' },
+    { code: 'QAR', label: 'ر.ق - ريال قطري' },
+    { code: 'KWD', label: 'د.ك - دينار كويتي' },
+    { code: 'OMR', label: 'ر.ع - ريال عماني' },
+    { code: 'BHD', label: 'د.ب - دينار بحريني' },
+    { code: 'JOD', label: 'د.أ - دينار أردني' },
+    { code: 'USD', label: '$ - دولار أمريكي' },
+    { code: 'EUR', label: '€ - يورو' }
+  ];
 
   useEffect(() => {
     if (!loading) {
@@ -43,15 +78,17 @@ export default function SetupTenantPage() {
       return;
     }
 
-    const saudiPhoneRegex = /^(05|5)(0|1|3|4|5|6|7|8|9)\d{7}$/;
-    if (!saudiPhoneRegex.test(phone.trim())) {
-      setErrorMsg('يرجى إدخال رقم جوال سعودي صحيح (مثال: 0512345678)');
+    const cleanPhone = phone.trim().replace(/\D/g, '');
+    if (cleanPhone.length < 7 || cleanPhone.length > 14) {
+      setErrorMsg('يرجى إدخال رقم جوال صحيح يتراوح بين 7 إلى 14 رقماً');
       setLoadingSubmit(false);
       return;
     }
 
+    const fullPhone = `${countryCode} ${cleanPhone}`;
+
     try {
-      const created = await submitJoinRequest(companyName, fullName, phone);
+      const created = await submitJoinRequest(companyName, fullName, fullPhone, currency);
       if (created) {
         alert('تم تقديم طلب الانضمام بنجاح! وهو قيد المراجعة الآن.');
       } else {
@@ -107,6 +144,10 @@ export default function SetupTenantPage() {
               <div className="flex justify-between items-center border-b border-slate-900 pb-2">
                 <span className="text-slate-500">رقم جوال التواصل</span>
                 <span className="font-bold text-slate-200 font-mono">{joinRequest.phone}</span>
+              </div>
+              <div className="flex justify-between items-center border-b border-slate-900 pb-2">
+                <span className="text-slate-500">العملة الرئيسية</span>
+                <span className="font-bold text-slate-200">{joinRequest.currency || 'SAR'}</span>
               </div>
               <div className="flex justify-between items-center pb-1">
                 <span className="text-slate-500">حالة الطلب</span>
@@ -236,17 +277,44 @@ export default function SetupTenantPage() {
 
             <div className="flex flex-col gap-1.5">
               <label className="text-xs text-slate-400 font-semibold">رقم الجوال (محمول التواصل)</label>
-              <div className="relative">
+              <div className="flex gap-2" style={{ direction: 'ltr' }}>
+                <select
+                  value={countryCode}
+                  onChange={(e) => setCountryCode(e.target.value)}
+                  className="bg-slate-950 border border-slate-850 rounded-lg px-2 py-2.5 text-sm text-slate-200 focus:outline-none focus:ring-1 focus:ring-emerald-500 font-sans"
+                  style={{ width: '120px' }}
+                >
+                  {countries.map((c) => (
+                    <option key={c.code} value={c.code}>
+                      {c.flag} {c.code}
+                    </option>
+                  ))}
+                </select>
                 <input
                   required
-                  type="text"
-                  placeholder="مثال: 0512345678"
+                  type="tel"
+                  placeholder="مثال: 512345678"
                   value={phone}
                   onChange={(e) => setPhone(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-850 rounded-lg px-3 py-2.5 text-sm text-slate-200 focus:outline-none focus:ring-1 focus:ring-emerald-500 placeholder:text-slate-700 font-mono text-left"
-                  style={{ direction: 'ltr' }}
+                  className="flex-1 bg-slate-950 border border-slate-850 rounded-lg px-3 py-2.5 text-sm text-slate-200 focus:outline-none focus:ring-1 focus:ring-emerald-500 placeholder:text-slate-700 font-mono"
                 />
               </div>
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+              <label className="text-xs text-slate-400 font-semibold">العملة الرئيسية للمكتب / المتجر</label>
+              <select
+                value={currency}
+                onChange={(e) => setCurrency(e.target.value)}
+                className="w-full bg-slate-950 border border-slate-850 rounded-lg px-3 py-2.5 text-sm text-slate-200 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+              >
+                {currencies.map((curr) => (
+                  <option key={curr.code} value={curr.code}>
+                    {curr.label}
+                  </option>
+                ))}
+              </select>
+              <span className="text-[10px] text-slate-500">سيتم تسعير السيارات والتقارير المالية والمدفوعات بهذه العملة.</span>
             </div>
 
             <div className="flex flex-col gap-1.5">
