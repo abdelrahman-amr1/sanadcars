@@ -67,3 +67,25 @@ CREATE POLICY logs_insert ON audit_logs
     tenant_id IN (SELECT tenant_id FROM tenant_members WHERE user_id = auth.uid())
     OR auth.jwt() ->> 'email' = 'abdelrahman.amr@gmail.com'
   );
+
+-- 7. دالة جلب معرّف UUID للمستخدم بالبريد الإلكتروني لتسهيل الإضافة
+CREATE OR REPLACE FUNCTION get_user_id_by_email(email_address text)
+RETURNS uuid
+SECURITY DEFINER
+AS $$
+BEGIN
+  RETURN (SELECT id FROM auth.users WHERE email = email_address);
+END;
+$$ LANGUAGE plpgsql;
+
+-- 8. إنشاء منظر (View) لعرض الموظفين مع بريدهم الإلكتروني لتسهيل الإدارة
+CREATE OR REPLACE VIEW tenant_members_with_emails AS
+SELECT 
+  tm.id,
+  tm.tenant_id,
+  tm.user_id,
+  tm.role,
+  tm.created_at,
+  u.email AS user_email
+FROM tenant_members tm
+JOIN auth.users u ON tm.user_id = u.id;

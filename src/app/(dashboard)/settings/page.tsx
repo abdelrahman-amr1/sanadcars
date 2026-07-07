@@ -27,6 +27,7 @@ interface Member {
   user_id: string;
   role: 'owner' | 'admin' | 'operator';
   created_at: string;
+  user_email?: string;
 }
 
 interface AuditLog {
@@ -49,7 +50,7 @@ export default function SettingsPage() {
 
   // User management state
   const [members, setMembers] = useState<Member[]>([]);
-  const [newMemberUid, setNewMemberUid] = useState('');
+  const [newMemberEmail, setNewMemberEmail] = useState('');
   const [newMemberRole, setNewMemberRole] = useState<'admin' | 'operator'>('operator');
   const [usersLoading, setUsersLoading] = useState(false);
 
@@ -70,14 +71,25 @@ export default function SettingsPage() {
     if (!tenant) return;
     setUsersLoading(true);
     try {
+      // First try to load from view (with emails)
       const { data, error } = await supabase
-        .from('tenant_members')
+        .from('tenant_members_with_emails')
         .select('*')
         .eq('tenant_id', tenant.id)
         .order('created_at', { ascending: false });
 
-      if (error) throw error;
-      setMembers(data as Member[]);
+      if (error) {
+        // Fallback to table if view doesn't exist yet
+        const { data: fallbackData, error: fallbackError } = await supabase
+          .from('tenant_members')
+          .select('*')
+          .eq('tenant_id', tenant.id)
+          .order('created_at', { ascending: false });
+        if (fallbackError) throw fallbackError;
+        setMembers(fallbackData as Member[]);
+      } else {
+        setMembers(data as Member[]);
+      }
     } catch (err) {
       console.error('Error loading members:', err);
     } finally {
@@ -148,18 +160,28 @@ export default function SettingsPage() {
     }
   };
 
-  // Add Member
+  // Add Member by Email
   const handleAddMember = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!tenant || !newMemberUid.trim()) return;
+    if (!tenant || !newMemberEmail.trim()) return;
     setUsersLoading(true);
     try {
-      // Upsert member into database
+      // 1. Resolve email to UUID via RPC function
+      const { data: resolvedUid, error: rpcError } = await supabase
+        .rpc('get_user_id_by_email', { email_address: newMemberEmail.trim() });
+
+      if (rpcError || !resolvedUid) {
+        alert('فشل العثور على هذا البريد الإلكتروني. يرجى التأكد من أن الموظف قام بإنشاء حساب بالمنصة أولاً.');
+        setUsersLoading(false);
+        return;
+      }
+
+      // 2. Upsert member into database
       const { error } = await supabase
         .from('tenant_members')
         .upsert({
           tenant_id: tenant.id,
-          user_id: newMemberUid.trim(),
+          user_id: resolvedUid,
           role: newMemberRole
         });
 
@@ -169,16 +191,16 @@ export default function SettingsPage() {
         tenantId: tenant.id,
         action: 'create',
         entityType: 'member',
-        entityName: `إضافة مستخدم جديد: ${newMemberUid.trim()}`,
-        details: { user_id: newMemberUid.trim(), role: newMemberRole }
+        entityName: `إضافة موظف جديد بالبريد: ${newMemberEmail.trim()}`,
+        details: { user_id: resolvedUid, email: newMemberEmail.trim(), role: newMemberRole }
       });
 
       alert('تم إضافة وتفويض العضو بنجاح!');
-      setNewMemberUid('');
+      setNewMemberEmail('');
       loadMembers();
     } catch (err) {
       console.error('Error adding member:', err);
-      alert('فشل إضافة العضو، تأكد من صحة معرف المستخدم (UUID)');
+      alert('فشل إضافة العضو، يرجى المحاولة لاحقاً');
     } finally {
       setUsersLoading(false);
     }
@@ -388,14 +410,14 @@ export default function SettingsPage() {
             <CardContent>
               <form onSubmit={handleAddMember} className="flex flex-col sm:flex-row gap-4 items-end">
                 <div className="flex-1 flex flex-col gap-1.5 w-full">
-                  <label className="text-xs text-slate-450 font-bold">معرّف الموظف (UUID للمستخدم في Supabase)</label>
+                  <label className="text-xs text-slate-400 font-bold">البريد الإلكتروني للموظف بالمنصة</label>
                   <input
                     required
-                    type="text"
-                    placeholder="مثال: c6d922aa-b8cf-4b7f-94c2-4cc92ca90ecb"
-                    value={newMemberUid}
-                    onChange={(e) => setNewMemberUid(e.target.value)}
-                    className="bg-slate-950 border border-slate-850 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:ring-1 focus:ring-emerald-500 placeholder:text-slate-800 font-mono text-left"
+                    type="email"
+                    placeholder="مثال: employee@example.com"
+                    value={newMemberEmail}
+                    onChange={(e) => setNewMemberEmail(e.target.value)}
+                    className="bg-slate-950 border border-slate-850 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:ring-1 focus:ring-emerald-500 placeholder:text-slate-800 text-left"
                     style={{ direction: 'ltr' }}
                   />
                 </div>
@@ -439,7 +461,8 @@ export default function SettingsPage() {
                   <table className="w-full text-right text-sm">
                     <thead>
                       <tr className="border-b border-slate-800 text-slate-400 text-xs">
-                        <th className="pb-3 pt-2 px-4 font-bold">معرّف الموظف الفريد (User UUID)</th>
+                        <th className="pb-3 pt-2 px-4 font-bold">البريد الإلكتروني</th>
+                        <th className="pb-3 pt-2 px-4 font-bold">معرّف الموظف (UUID)</th>
                         <th className="pb-3 pt-2 px-4 font-bold">دور الصلاحية بالمنصة</th>
                         <th className="pb-3 pt-2 px-4 font-bold text-left">إجراءات</th>
                       </tr>
@@ -447,6 +470,9 @@ export default function SettingsPage() {
                     <tbody className="divide-y divide-slate-850">
                       {members.map((m) => (
                         <tr key={m.id} className="text-slate-300 hover:bg-slate-950/20 transition-all">
+                          <td className="py-4 px-4 font-semibold text-slate-200 text-left" style={{ direction: 'ltr' }}>
+                            {m.user_email || 'غير متاح (يرجى تطبيق SQL)'}
+                          </td>
                           <td className="py-4 px-4 font-mono text-xs text-slate-400">{m.user_id}</td>
                           <td className="py-4 px-4">
                             <span
