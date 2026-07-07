@@ -14,7 +14,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "FleetFlow SaaS - لوحة إدارة أساطيل حركة السيارات",
+  title: "سند كار (SanadCars) - لوحة إدارة أساطيل حركة السيارات",
   description: "نظام متكامل لإدارة حركة السيارات، السائقين، الصيانة، والتسويات المالية لمكاتب تأجير السيارات.",
 };
 

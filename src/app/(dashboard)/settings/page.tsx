@@ -40,7 +40,7 @@ interface AuditLog {
 }
 
 export default function SettingsPage() {
-  const { tenant, refreshTenant } = useTenant();
+  const { tenant, refreshTenant, setPrimaryColor, setDarkMode: setContextDarkMode } = useTenant();
   const [activeTab, setActiveTab] = useState<'general' | 'users' | 'audit'>('general');
   const [loading, setLoading] = useState(false);
 
@@ -65,6 +65,16 @@ export default function SettingsPage() {
       setDarkMode(tenant.dark_mode !== false);
     }
   }, [tenant]);
+
+  const handleColorChange = (color: string) => {
+    setThemeColor(color);
+    setPrimaryColor(color);
+  };
+
+  const handleDarkModeChange = (dark: boolean) => {
+    setDarkMode(dark);
+    setContextDarkMode(dark);
+  };
 
   // Load tenant members
   const loadMembers = useCallback(async () => {
@@ -314,7 +324,7 @@ export default function SettingsPage() {
                   ].map((c) => (
                     <button
                       key={c.id}
-                      onClick={() => setThemeColor(c.id)}
+                      onClick={() => handleColorChange(c.id)}
                       className={`flex items-center gap-2.5 p-3 rounded-xl border text-right transition-all ${
                         themeColor === c.id
                           ? 'border-emerald-500 bg-emerald-500/10 text-slate-100 shadow-md'
@@ -336,7 +346,7 @@ export default function SettingsPage() {
                 </div>
                 <div className="flex items-center gap-2">
                   <button
-                    onClick={() => setDarkMode(true)}
+                    onClick={() => handleDarkModeChange(true)}
                     className={`p-2 rounded-lg border transition-all ${
                       darkMode
                         ? 'bg-emerald-500/10 border-emerald-500 text-emerald-500'
@@ -346,7 +356,7 @@ export default function SettingsPage() {
                     <Moon className="w-5 h-5" />
                   </button>
                   <button
-                    onClick={() => setDarkMode(false)}
+                    onClick={() => handleDarkModeChange(false)}
                     className={`p-2 rounded-lg border transition-all ${
                       !darkMode
                         ? 'bg-emerald-500/10 border-emerald-500 text-emerald-500'

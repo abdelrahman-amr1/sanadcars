@@ -50,9 +50,9 @@ export function Sidebar() {
       <div className="flex md:hidden items-center justify-between bg-slate-900 border-b border-slate-800 p-4 h-16 w-full fixed top-0 z-40">
         <div className="flex items-center gap-2">
           <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-emerald-500 to-teal-400 flex items-center justify-center font-bold text-slate-950 text-lg">
-            F
+            S
           </div>
-          <span className="font-extrabold text-slate-200 tracking-wider">FleetFlow</span>
+          <span className="font-extrabold text-slate-200 tracking-wider">SanadCars</span>
         </div>
         <button
           onClick={() => setIsOpen(!isOpen)}
@@ -77,11 +77,11 @@ export function Sidebar() {
           <div className="p-6 flex items-center justify-between border-b border-slate-800/50">
             <div className="flex items-center gap-3 overflow-hidden">
               <div className="w-10 h-10 shrink-0 rounded-xl bg-gradient-to-tr from-emerald-500 to-teal-400 flex items-center justify-center font-black text-slate-950 text-xl shadow-lg shadow-emerald-500/20">
-                FF
+                SC
               </div>
               {isOpen && (
                 <div className="flex flex-col">
-                  <span className="font-black text-slate-100 tracking-wider text-base">FleetFlow</span>
+                  <span className="font-black text-slate-100 tracking-wider text-base">SanadCars</span>
                   <span className="text-[10px] text-emerald-400 font-semibold tracking-widest uppercase">
                     {isDemoMode ? 'Sandbox Preview' : 'Pro SaaS'}
                   </span>

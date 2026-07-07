@@ -30,6 +30,10 @@ interface TenantContextType {
   isSuperAdmin: boolean;
   loading: boolean;
   needsOnboarding: boolean;
+  primaryColor: string;
+  darkMode: boolean;
+  setPrimaryColor: (color: string) => void;
+  setDarkMode: (dark: boolean) => void;
   toggleDemoMode: () => void;
   setDemoMode: (val: boolean) => void;
   logout: () => Promise<void>;
@@ -47,6 +51,8 @@ export function TenantProvider({ children }: { children: React.ReactNode }) {
   const isDemoMode = false; // Disabled completely as requested
   const [loading, setLoading] = useState<boolean>(true);
   const [needsOnboarding, setNeedsOnboarding] = useState<boolean>(false);
+  const [primaryColor, setPrimaryColor] = useState<string>('emerald');
+  const [darkMode, setDarkMode] = useState<boolean>(true);
   const router = useRouter();
 
   const toggleDemoMode = () => {};
@@ -100,6 +106,8 @@ export function TenantProvider({ children }: { children: React.ReactNode }) {
       setNeedsOnboarding(false);
       setJoinRequest(null);
       setTenant(tenantData as Tenant);
+      setPrimaryColor(tenantData.primary_color || 'emerald');
+      setDarkMode(tenantData.dark_mode !== false);
       return tenantData as Tenant;
     } catch (err) {
       console.error('Unexpected tenant query error:', err);
@@ -324,6 +332,10 @@ export function TenantProvider({ children }: { children: React.ReactNode }) {
         isSuperAdmin,
         loading,
         needsOnboarding,
+        primaryColor,
+        darkMode,
+        setPrimaryColor,
+        setDarkMode,
         toggleDemoMode,
         setDemoMode,
         logout,
