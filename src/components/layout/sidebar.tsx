@@ -17,7 +17,8 @@ import {
   Menu,
   ShieldCheck,
   Settings,
-  Receipt
+  Receipt,
+  BarChart3
 } from 'lucide-react';
 import { useState } from 'react';
 
@@ -28,6 +29,7 @@ const menuItems = [
   { name: 'السائقين', href: '/drivers', icon: Users },
   { name: 'المخالفات المرورية', href: '/violations', icon: FileText },
   { name: 'المصاريف والنثريات', href: '/expenses', icon: Receipt },
+  { name: 'التقارير الحسابية', href: '/reports', icon: BarChart3 },
   { name: 'الصيانة والعدادات', href: '/maintenance', icon: Wrench },
   { name: 'الإعدادات والسمات', href: '/settings', icon: Settings },
 ];

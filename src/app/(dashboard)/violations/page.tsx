@@ -80,6 +80,76 @@ export default function ViolationsPage() {
     status: 'pending' as Violation['status']
   });
 
+  // Edit Violation States
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [selectedViolationToEdit, setSelectedViolationToEdit] = useState<Violation | null>(null);
+  const [editViolationState, setEditViolationState] = useState({
+    violation_number: '',
+    amount: 0,
+    violation_date: '',
+    vehicle_id: '',
+    order_id: '',
+    status: 'pending' as Violation['status']
+  });
+
+  const handleOpenEditModal = (violation: Violation) => {
+    setSelectedViolationToEdit(violation);
+    setEditViolationState({
+      violation_number: violation.violation_number || '',
+      amount: violation.amount || 0,
+      violation_date: violation.violation_date ? new Date(violation.violation_date).toISOString().slice(0, 16) : '',
+      vehicle_id: violation.vehicle_id || '',
+      order_id: violation.order_id || '',
+      status: violation.status || 'pending'
+    });
+    setShowEditModal(true);
+  };
+
+  const handleUpdateViolation = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedViolationToEdit) return;
+
+    const payload = {
+      violation_number: editViolationState.violation_number,
+      amount: editViolationState.amount,
+      violation_date: new Date(editViolationState.violation_date).toISOString(),
+      vehicle_id: editViolationState.vehicle_id,
+      order_id: editViolationState.order_id || null,
+      status: editViolationState.status
+    };
+
+    if (isDemoMode) {
+      const selectedVehicle = vehicles.find(v => v.id === editViolationState.vehicle_id);
+      setViolations(prev => prev.map(vi => vi.id === selectedViolationToEdit.id ? { ...vi, ...payload, vehicle: selectedVehicle } : vi));
+    } else {
+      if (tenant) {
+        const { error } = await supabase.from('traffic_violations')
+          .update(payload)
+          .eq('id', selectedViolationToEdit.id)
+          .eq('tenant_id', tenant.id);
+          
+        if (error) {
+          alert('حدث خطأ أثناء تعديل بيانات المخالفة: ' + error.message);
+          return;
+        }
+
+        const vehicle = vehicles.find(v => v.id === editViolationState.vehicle_id);
+        await logActivity({
+          tenantId: tenant.id,
+          action: 'update',
+          entityType: 'violation',
+          entityName: `تعديل مخالفة مرورية رقم: ${editViolationState.violation_number} بقيمة ${editViolationState.amount} ${currencySymbol} (على سيارة: ${vehicle?.model || ''})`,
+          details: payload
+        });
+        
+        loadData();
+      }
+    }
+
+    setShowEditModal(false);
+    setSelectedViolationToEdit(null);
+  };
+
   // Sync Demo Mode changes at render time
   const [prevDemoMode, setPrevDemoMode] = useState(isDemoMode);
   if (isDemoMode !== prevDemoMode) {
@@ -263,15 +333,25 @@ export default function ViolationsPage() {
                   </span>
                 </div>
 
-                {violation.status === 'pending' && (
+                <div className="flex gap-2 mt-2">
                   <Button
-                    onClick={() => handlePayViolation(violation.id)}
+                    onClick={() => handleOpenEditModal(violation)}
                     size="sm"
-                    className="bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold px-4 py-1.5 text-xs mt-2"
+                    variant="outline"
+                    className="border-slate-800 text-emerald-450 hover:text-emerald-455 font-bold px-3 py-1.5 text-xs"
                   >
-                    تسوية وسداد الغرامة
+                    تعديل
                   </Button>
-                )}
+                  {violation.status === 'pending' && (
+                    <Button
+                      onClick={() => handlePayViolation(violation.id)}
+                      size="sm"
+                      className="bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold px-4 py-1.5 text-xs"
+                    >
+                      تسوية وسداد الغرامة
+                    </Button>
+                  )}
+                </div>
               </div>
             </div>
           </Card>
@@ -366,6 +446,112 @@ export default function ViolationsPage() {
 
                 <Button type="submit" className="w-full bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold py-2.5 mt-2">
                   تسجيل الغرامة وحفظها
+                </Button>
+              </form>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+      {/* EDIT VIOLATION MODAL */}
+      {showEditModal && selectedViolationToEdit && (
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <Card className="w-full max-w-md bg-slate-900 border-slate-800 shadow-2xl relative text-right" style={{ direction: 'rtl' }}>
+            <button
+              onClick={() => {
+                setShowEditModal(false);
+                setSelectedViolationToEdit(null);
+              }}
+              className="absolute top-4 left-4 p-1.5 hover:bg-slate-800 rounded-full text-slate-400 transition"
+            >
+              <X className="w-5 h-5" />
+            </button>
+            <CardHeader>
+              <CardTitle className="text-xl font-bold flex items-center gap-2">
+                <FileText className="w-5 h-5 text-emerald-400" />
+                تعديل بيانات المخالفة
+              </CardTitle>
+              <CardDescription className="text-slate-400 text-xs">
+                تعديل تفاصيل المخالفة وقيمتها وحالتها في قاعدة البيانات
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <form onSubmit={handleUpdateViolation} className="flex flex-col gap-4">
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-xs text-slate-400 font-semibold">رقم المخالفة</label>
+                    <input
+                      required
+                      type="text"
+                      value={editViolationState.violation_number}
+                      onChange={(e) => setEditViolationState(prev => ({ ...prev, violation_number: e.target.value }))}
+                      className="bg-slate-950 border border-slate-850 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none"
+                    />
+                  </div>
+
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-xs text-slate-400 font-semibold">مبلغ الغرامة ({currencySymbol})</label>
+                    <input
+                      required
+                      type="number"
+                      value={editViolationState.amount}
+                      onChange={(e) => setEditViolationState(prev => ({ ...prev, amount: parseInt(e.target.value) || 0 }))}
+                      className="bg-slate-950 border border-slate-850 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none text-right"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-xs text-slate-400 font-semibold">السيارة المعنية</label>
+                  <select
+                    required
+                    value={editViolationState.vehicle_id}
+                    onChange={(e) => setEditViolationState(prev => ({ ...prev, vehicle_id: e.target.value }))}
+                    className="bg-slate-950 border border-slate-850 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none"
+                  >
+                    <option value="">-- اختر السيارة --</option>
+                    {vehicles.map(v => (
+                      <option key={v.id} value={v.id}>{v.model} - {v.plate_number}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-xs text-slate-400 font-semibold">تاريخ ووقت المخالفة</label>
+                    <input
+                      required
+                      type="datetime-local"
+                      value={editViolationState.violation_date}
+                      onChange={(e) => setEditViolationState(prev => ({ ...prev, violation_date: e.target.value }))}
+                      className="bg-slate-950 border border-slate-850 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none"
+                    />
+                  </div>
+
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-xs text-slate-400 font-semibold">رقم أمر التشغيل (اختياري)</label>
+                    <input
+                      type="text"
+                      value={editViolationState.order_id}
+                      onChange={(e) => setEditViolationState(prev => ({ ...prev, order_id: e.target.value }))}
+                      className="bg-slate-950 border border-slate-850 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-xs text-slate-400 font-semibold">حالة المخالفة</label>
+                  <select
+                    value={editViolationState.status}
+                    onChange={(e) => setEditViolationState(prev => ({ ...prev, status: e.target.value as Violation['status'] }))}
+                    className="bg-slate-950 border border-slate-850 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none"
+                  >
+                    <option value="pending">معلقة (غير مسددة)</option>
+                    <option value="paid">مسددة (تم الدفع)</option>
+                  </select>
+                </div>
+
+                <Button type="submit" className="w-full bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold py-2.5 mt-2">
+                  حفظ التعديلات
                 </Button>
               </form>
             </CardContent>

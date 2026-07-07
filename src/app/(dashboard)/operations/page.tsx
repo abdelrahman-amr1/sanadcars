@@ -155,8 +155,97 @@ export default function OperationsPage() {
     amount_received: 0,
     amount_paid_supplier: 0,
     expenses: [] as Expense[],
-    newExpense: { category: 'fuel' as Expense['category'], amount: 0, description: '' }
+    newExpense: { category: 'fuel' as Expense['category'], amount: 0, description: '' },
+    violations: [] as { violation_number: string; amount: number }[],
+    newViolation: { violation_number: '', amount: 0 }
   });
+
+  // Edit Order States
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [selectedOrderToEdit, setSelectedOrderToEdit] = useState<OperationOrder | null>(null);
+  const [editOrderState, setEditOrderState] = useState({
+    vehicle_id: '',
+    driver_id: '',
+    customer_name: '',
+    customer_phone: '',
+    expected_out_date: '',
+    expected_return_date: '',
+    actual_out_date: '',
+    actual_return_date: '',
+    out_mileage: 0,
+    return_mileage: 0,
+    amount_received_from_customer: 0,
+    amount_paid_to_external_supplier: 0,
+    net_profit: 0,
+    status: 'active'
+  });
+
+  const handleOpenEditModal = (order: OperationOrder) => {
+    setSelectedOrderToEdit(order);
+    setEditOrderState({
+      vehicle_id: order.vehicle_id || '',
+      driver_id: order.driver_id || '',
+      customer_name: order.customer_name || '',
+      customer_phone: order.customer_phone || '',
+      expected_out_date: order.expected_out_date ? new Date(order.expected_out_date).toISOString().slice(0, 16) : '',
+      expected_return_date: order.expected_return_date ? new Date(order.expected_return_date).toISOString().slice(0, 16) : '',
+      actual_out_date: order.actual_out_date ? new Date(order.actual_out_date).toISOString().slice(0, 16) : '',
+      actual_return_date: order.actual_return_date ? new Date(order.actual_return_date).toISOString().slice(0, 16) : '',
+      out_mileage: order.out_mileage || 0,
+      return_mileage: order.return_mileage || 0,
+      amount_received_from_customer: order.amount_received_from_customer || 0,
+      amount_paid_to_external_supplier: order.amount_paid_to_external_supplier || 0,
+      net_profit: order.net_profit || 0,
+      status: order.status || 'active'
+    });
+    setShowEditModal(true);
+  };
+
+  const handleUpdateOrder = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedOrderToEdit) return;
+
+    const payload = {
+      vehicle_id: editOrderState.vehicle_id,
+      driver_id: editOrderState.driver_id,
+      customer_name: editOrderState.customer_name,
+      customer_phone: editOrderState.customer_phone,
+      expected_out_date: editOrderState.expected_out_date ? new Date(editOrderState.expected_out_date).toISOString() : new Date().toISOString(),
+      expected_return_date: editOrderState.expected_return_date ? new Date(editOrderState.expected_return_date).toISOString() : new Date().toISOString(),
+      actual_out_date: editOrderState.actual_out_date ? new Date(editOrderState.actual_out_date).toISOString() : null,
+      actual_return_date: editOrderState.actual_return_date ? new Date(editOrderState.actual_return_date).toISOString() : null,
+      out_mileage: editOrderState.out_mileage,
+      return_mileage: editOrderState.status === 'closed' ? editOrderState.return_mileage : null,
+      amount_received_from_customer: editOrderState.amount_received_from_customer,
+      amount_paid_to_external_supplier: editOrderState.amount_paid_to_external_supplier,
+      net_profit: editOrderState.amount_received_from_customer - editOrderState.amount_paid_to_external_supplier,
+      status: editOrderState.status as OperationOrder['status']
+    };
+
+    if (isDemoMode) {
+      setOrders(prev => prev.map(o => o.id === selectedOrderToEdit.id ? { ...o, ...payload } : o));
+    } else {
+      if (tenant) {
+        await supabase.from('operation_orders')
+          .update(payload)
+          .eq('id', selectedOrderToEdit.id)
+          .eq('tenant_id', tenant.id);
+          
+        if (editOrderState.status === 'closed') {
+          await supabase.from('vehicles').update({ status: 'available', current_mileage: editOrderState.return_mileage }).eq('id', editOrderState.vehicle_id).eq('tenant_id', tenant.id);
+          await supabase.from('drivers').update({ status: 'active' }).eq('id', editOrderState.driver_id).eq('tenant_id', tenant.id);
+        } else if (editOrderState.status === 'active') {
+          await supabase.from('vehicles').update({ status: 'in_operation' }).eq('id', editOrderState.vehicle_id).eq('tenant_id', tenant.id);
+          await supabase.from('drivers').update({ status: 'in_operation' }).eq('id', editOrderState.driver_id).eq('tenant_id', tenant.id);
+        }
+        
+        loadData();
+      }
+    }
+
+    setShowEditModal(false);
+    setSelectedOrderToEdit(null);
+  };
 
   // Sync Demo Mode changes at render time
   const [prevDemoMode, setPrevDemoMode] = useState(isDemoMode);
@@ -171,30 +260,30 @@ export default function OperationsPage() {
 
   const loadData = useCallback(async () => {
     if (!tenant) return;
-    const { data: vData } = await supabase.from('vehicles').select('*').eq('tenant_id', tenant.id);
-    const { data: dData } = await supabase.from('drivers').select('*').eq('tenant_id', tenant.id);
-    const { data: oData } = await supabase.from('operation_orders').select(`
-      *,
-      vehicle:vehicles(*),
-      driver:drivers(*)
-    `).eq('tenant_id', tenant.id).order('created_at', { ascending: false });
+    try {
+      const [vRes, dRes, oRes, eRes] = await Promise.all([
+        supabase.from('vehicles').select('*').eq('tenant_id', tenant.id),
+        supabase.from('drivers').select('*').eq('tenant_id', tenant.id),
+        supabase.from('operation_orders').select(`
+          *,
+          vehicle:vehicles(*),
+          driver:drivers(*)
+        `).eq('tenant_id', tenant.id).order('created_at', { ascending: false }),
+        supabase.from('expenses').select('*').eq('tenant_id', tenant.id)
+      ]);
 
-    if (vData) setVehicles(vData as Vehicle[]);
-    if (dData) setDrivers(dData as Driver[]);
-    if (oData) {
-      const ordersWithExpenses = await Promise.all(
-        oData.map(async (order: { id: string }) => {
-          const { data: expData } = await supabase
-            .from('expenses')
-            .select('*')
-            .eq('order_id', order.id);
-          return {
-            ...order,
-            expenses: expData || []
-          };
-        })
-      );
-      setOrders(ordersWithExpenses as OperationOrder[]);
+      if (vRes.data) setVehicles(vRes.data as Vehicle[]);
+      if (dRes.data) setDrivers(dRes.data as Driver[]);
+      if (oRes.data) {
+        const expensesData = eRes.data || [];
+        const ordersWithExpenses = oRes.data.map((order: any) => ({
+          ...order,
+          expenses: expensesData.filter((e: any) => e.order_id === order.id)
+        }));
+        setOrders(ordersWithExpenses as OperationOrder[]);
+      }
+    } catch (err) {
+      console.error('Error loading operations data:', err);
     }
   }, [tenant]);
 
@@ -283,7 +372,9 @@ export default function OperationsPage() {
       amount_received: 0,
       amount_paid_supplier: 0,
       expenses: [],
-      newExpense: { category: 'fuel', amount: 0, description: '' }
+      newExpense: { category: 'fuel', amount: 0, description: '' },
+      violations: [],
+      newViolation: { violation_number: '', amount: 0 }
     });
     setShowSettleModal(true);
   };
@@ -359,6 +450,19 @@ export default function OperationsPage() {
             description: exp.description
           }));
           await supabase.from('expenses').insert(insertPayload);
+        }
+
+        if (settlement.violations && settlement.violations.length > 0) {
+          const insertViolations = settlement.violations.map(vi => ({
+            tenant_id: tenant.id,
+            order_id: selectedOrderToSettle.id,
+            vehicle_id: selectedOrderToSettle.vehicle_id,
+            violation_number: vi.violation_number,
+            amount: vi.amount,
+            violation_date: new Date().toISOString(),
+            status: 'pending'
+          }));
+          await supabase.from('traffic_violations').insert(insertViolations);
         }
         loadData();
       }
@@ -486,16 +590,27 @@ export default function OperationsPage() {
                   </span>
                 </div>
 
-                {order.status === 'active' && (
+                <div className="flex gap-2 mt-4 flex-wrap">
                   <Button
-                    onClick={() => handleOpenSettleModal(order)}
+                    onClick={() => handleOpenEditModal(order)}
                     size="sm"
-                    className="bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold gap-1 mt-4"
+                    variant="outline"
+                    className="border-slate-800 text-slate-400 hover:text-slate-200"
                   >
-                    <ArrowRightLeft className="w-4 h-4" />
-                    تسوية وإغلاق العداد
+                    تعديل البيانات
                   </Button>
-                )}
+                  
+                  {order.status === 'active' && (
+                    <Button
+                      onClick={() => handleOpenSettleModal(order)}
+                      size="sm"
+                      className="bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold gap-1"
+                    >
+                      <ArrowRightLeft className="w-4 h-4" />
+                      تسوية وإغلاق العداد
+                    </Button>
+                  )}
+                </div>
               </div>
             </div>
           </Card>
@@ -736,13 +851,89 @@ export default function OperationsPage() {
                   )}
                 </div>
 
+                {/* VIOLATIONS SUB-SECTION */}
+                <div className="border-t border-slate-800 pt-3 mt-3">
+                  <label className="text-sm font-bold text-slate-300 block mb-2">المخالفات المرورية أثناء الرحلة (إن وجدت)</label>
+
+                  <div className="grid grid-cols-3 gap-2 items-end mb-3">
+                    <div className="flex flex-col gap-1 col-span-2 text-right">
+                      <span className="text-[10px] text-slate-400">رقم المخالفة</span>
+                      <input
+                        type="text"
+                        placeholder="Vxxxxxxxx"
+                        value={settlement.newViolation?.violation_number || ''}
+                        onChange={(e) => setSettlement(prev => ({
+                          ...prev,
+                          newViolation: { ...prev.newViolation, violation_number: e.target.value }
+                        }))}
+                        className="bg-slate-950 border border-slate-850 rounded px-2 py-1 text-xs text-slate-200 focus:outline-none"
+                      />
+                    </div>
+
+                    <div className="flex flex-col gap-1 text-right">
+                      <span className="text-[10px] text-slate-400">المبلغ</span>
+                      <input
+                        type="number"
+                        min="0"
+                        value={settlement.newViolation?.amount || ''}
+                        onChange={(e) => setSettlement(prev => ({
+                          ...prev,
+                          newViolation: { ...prev.newViolation, amount: parseFloat(e.target.value) || 0 }
+                        }))}
+                        className="bg-slate-950 border border-slate-850 rounded px-2 py-1 text-xs text-slate-200 focus:outline-none"
+                      />
+                    </div>
+                  </div>
+                  
+                  <div className="flex justify-end mb-2">
+                    <Button
+                      type="button"
+                      onClick={() => {
+                        if (!settlement.newViolation?.violation_number || settlement.newViolation.amount <= 0) return;
+                        setSettlement(prev => ({
+                          ...prev,
+                          violations: [...(prev.violations || []), { ...prev.newViolation }],
+                          newViolation: { violation_number: '', amount: 0 }
+                        }));
+                      }}
+                      size="sm"
+                      className="bg-slate-800 hover:bg-slate-750 text-slate-200 text-xs h-8"
+                    >
+                      أضف مخالفة
+                    </Button>
+                  </div>
+
+                  {settlement.violations && settlement.violations.length > 0 && (
+                    <div className="bg-slate-950 p-2 rounded-lg flex flex-col gap-1.5 max-h-24 overflow-y-auto">
+                      {settlement.violations.map((vi, idx) => (
+                        <div key={idx} className="flex justify-between items-center text-xs text-slate-300">
+                          <span>مخالفة {vi.violation_number} - {vi.amount} {currencySymbol}</span>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSettlement(prev => ({
+                                ...prev,
+                                violations: prev.violations.filter((_, i) => i !== idx)
+                              }));
+                            }}
+                            className="text-red-400 hover:text-red-500 font-bold"
+                          >
+                            حذف
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
                 <div className="bg-slate-950/60 p-3 rounded-lg border border-slate-850 text-sm flex justify-between items-center font-bold mt-2">
                   <span>صافي ربح المكتب المتوقع:</span>
                   <span className="text-emerald-400 font-black">
                     {(
                       settlement.amount_received -
                       settlement.amount_paid_supplier -
-                      settlement.expenses.reduce((sum, e) => sum + e.amount, 0)
+                      settlement.expenses.reduce((sum, e) => sum + e.amount, 0) -
+                      (settlement.violations || []).reduce((sum, vi) => sum + vi.amount, 0)
                     ).toLocaleString()}{' '}
                     {currencySymbol}
                   </span>
@@ -750,6 +941,157 @@ export default function OperationsPage() {
 
                 <Button type="submit" className="w-full bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold py-2.5 mt-2">
                   إغلاق وتسوية الرحلة
+                </Button>
+              </form>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* EDIT ORDER MODAL */}
+      {showEditModal && selectedOrderToEdit && (
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <Card className="w-full max-w-lg bg-slate-900 border-slate-800 shadow-2xl relative overflow-y-auto max-h-[90vh] text-right" style={{ direction: 'rtl' }}>
+            <button
+              onClick={() => {
+                setShowEditModal(false);
+                setSelectedOrderToEdit(null);
+              }}
+              className="absolute top-4 left-4 p-1.5 hover:bg-slate-800 rounded-full text-slate-400 transition"
+            >
+              <X className="w-5 h-5" />
+            </button>
+            <CardHeader>
+              <CardTitle className="text-xl font-bold flex items-center gap-2">
+                <ArrowRightLeft className="w-5 h-5 text-emerald-400" />
+                تعديل أمر التشغيل
+              </CardTitle>
+              <CardDescription className="text-slate-400 text-xs">
+                تعديل كامل بيانات الرحلة المالية والتشغيلية المباشرة في قاعدة البيانات
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <form onSubmit={handleUpdateOrder} className="flex flex-col gap-4">
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-xs text-slate-400 font-semibold">اسم العميل</label>
+                    <input
+                      required
+                      type="text"
+                      value={editOrderState.customer_name}
+                      onChange={(e) => setEditOrderState(prev => ({ ...prev, customer_name: e.target.value }))}
+                      className="bg-slate-950 border border-slate-850 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none"
+                    />
+                  </div>
+
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-xs text-slate-400 font-semibold">رقم الجوال</label>
+                    <input
+                      required
+                      type="text"
+                      value={editOrderState.customer_phone}
+                      onChange={(e) => setEditOrderState(prev => ({ ...prev, customer_phone: e.target.value }))}
+                      className="bg-slate-950 border border-slate-850 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-xs text-slate-400 font-semibold">عداد الخروج (كم)</label>
+                    <input
+                      required
+                      type="number"
+                      value={editOrderState.out_mileage}
+                      onChange={(e) => setEditOrderState(prev => ({ ...prev, out_mileage: parseInt(e.target.value) || 0 }))}
+                      className="bg-slate-950 border border-slate-850 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none"
+                    />
+                  </div>
+
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-xs text-slate-400 font-semibold">عداد العودة (كم)</label>
+                    <input
+                      type="number"
+                      value={editOrderState.return_mileage}
+                      onChange={(e) => setEditOrderState(prev => ({ ...prev, return_mileage: parseInt(e.target.value) || 0 }))}
+                      className="bg-slate-950 border border-slate-850 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none"
+                      disabled={editOrderState.status !== 'closed'}
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-xs text-slate-400 font-semibold">المبلغ المستلم من العميل</label>
+                    <input
+                      required
+                      type="number"
+                      value={editOrderState.amount_received_from_customer}
+                      onChange={(e) => setEditOrderState(prev => ({ ...prev, amount_received_from_customer: parseFloat(e.target.value) || 0 }))}
+                      className="bg-slate-950 border border-slate-850 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none"
+                    />
+                  </div>
+
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-xs text-slate-400 font-semibold">المبلغ للملاك والموردين</label>
+                    <input
+                      required
+                      type="number"
+                      value={editOrderState.amount_paid_to_external_supplier}
+                      onChange={(e) => setEditOrderState(prev => ({ ...prev, amount_paid_to_external_supplier: parseFloat(e.target.value) || 0 }))}
+                      className="bg-slate-950 border border-slate-850 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-xs text-slate-400 font-semibold">حالة العقد</label>
+                    <select
+                      value={editOrderState.status}
+                      onChange={(e) => setEditOrderState(prev => ({ ...prev, status: e.target.value }))}
+                      className="bg-slate-950 border border-slate-850 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none"
+                    >
+                      <option value="active">نشط (بالخارج)</option>
+                      <option value="closed">مغلق (في الجراج)</option>
+                    </select>
+                  </div>
+
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-xs text-slate-400 font-semibold">تاريخ الخروج</label>
+                    <input
+                      type="datetime-local"
+                      value={editOrderState.expected_out_date}
+                      onChange={(e) => setEditOrderState(prev => ({ ...prev, expected_out_date: e.target.value }))}
+                      className="bg-slate-950 border border-slate-850 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-xs text-slate-400 font-semibold">تاريخ العودة الفعلي</label>
+                    <input
+                      type="datetime-local"
+                      value={editOrderState.actual_return_date}
+                      onChange={(e) => setEditOrderState(prev => ({ ...prev, actual_return_date: e.target.value }))}
+                      className="bg-slate-950 border border-slate-850 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none"
+                    />
+                  </div>
+
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-xs text-slate-400 font-semibold">تاريخ العودة المتوقع</label>
+                    <input
+                      type="datetime-local"
+                      value={editOrderState.expected_return_date}
+                      onChange={(e) => setEditOrderState(prev => ({ ...prev, expected_return_date: e.target.value }))}
+                      className="bg-slate-950 border border-slate-850 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none"
+                    />
+                  </div>
+                </div>
+
+                <Button type="submit" className="w-full bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold py-2.5 mt-2">
+                  حفظ التعديلات وتحديث البيانات
                 </Button>
               </form>
             </CardContent>

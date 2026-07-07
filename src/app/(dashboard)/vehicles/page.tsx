@@ -20,7 +20,8 @@ import {
   User,
   Shield,
   HelpCircle,
-  Truck
+  Truck,
+  AlertTriangle
 } from 'lucide-react';
 
 interface Vehicle {
@@ -32,6 +33,8 @@ interface Vehicle {
   external_supplier?: string | null;
   current_mileage: number;
   status: 'available' | 'in_operation' | 'maintenance';
+  image_url?: string | null;
+  pending_violations_sum?: number;
 }
 
 const mockVehicles: Vehicle[] = [
@@ -43,11 +46,82 @@ const mockVehicles: Vehicle[] = [
 ];
 
 export default function VehiclesPage() {
-  const { tenant, isDemoMode } = useTenant();
+  const { tenant, isDemoMode, currencySymbol } = useTenant();
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [showAddModal, setShowAddModal] = useState(false);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
+
+  // Edit Vehicle States
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [selectedVehicleToEdit, setSelectedVehicleToEdit] = useState<Vehicle | null>(null);
+  const [editVehicleState, setEditVehicleState] = useState({
+    plate_number: '',
+    model: '',
+    owner_national_id: '',
+    owner_name: '',
+    external_supplier: '',
+    current_mileage: 0,
+    status: 'available' as Vehicle['status']
+  });
+
+  const handleOpenEditModal = (vehicle: Vehicle) => {
+    setSelectedVehicleToEdit(vehicle);
+    setEditVehicleState({
+      plate_number: vehicle.plate_number || '',
+      model: vehicle.model || '',
+      owner_national_id: vehicle.owner_national_id || '',
+      owner_name: vehicle.owner_name || '',
+      external_supplier: vehicle.external_supplier || '',
+      current_mileage: vehicle.current_mileage || 0,
+      status: vehicle.status || 'available'
+    });
+    setShowEditModal(true);
+  };
+
+  const handleUpdateVehicle = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedVehicleToEdit) return;
+
+    const payload = {
+      plate_number: editVehicleState.plate_number,
+      model: editVehicleState.model,
+      owner_national_id: editVehicleState.owner_national_id,
+      owner_name: editVehicleState.owner_name,
+      external_supplier: editVehicleState.external_supplier || null,
+      current_mileage: editVehicleState.current_mileage,
+      status: editVehicleState.status
+    };
+
+    if (isDemoMode) {
+      setVehicles(prev => prev.map(v => v.id === selectedVehicleToEdit.id ? { ...v, ...payload } : v));
+    } else {
+      if (tenant) {
+        const { error } = await supabase.from('vehicles')
+          .update(payload)
+          .eq('id', selectedVehicleToEdit.id)
+          .eq('tenant_id', tenant.id);
+          
+        if (error) {
+          alert('حدث خطأ أثناء تعديل بيانات السيارة: ' + error.message);
+          return;
+        }
+
+        await logActivity({
+          tenantId: tenant.id,
+          action: 'update',
+          entityType: 'vehicle',
+          entityName: `تعديل بيانات السيارة: ${editVehicleState.model} (${editVehicleState.plate_number})`,
+          details: payload
+        });
+        
+        loadData();
+      }
+    }
+
+    setShowEditModal(false);
+    setSelectedVehicleToEdit(null);
+  };
 
   const [newVehicle, setNewVehicle] = useState({
     plate_number: '',
@@ -70,8 +144,27 @@ export default function VehiclesPage() {
 
   const loadData = useCallback(async () => {
     if (!tenant) return;
-    const { data } = await supabase.from('vehicles').select('*').eq('tenant_id', tenant.id);
-    if (data) setVehicles(data as Vehicle[]);
+    try {
+      const [vRes, viRes] = await Promise.all([
+        supabase.from('vehicles').select('*').eq('tenant_id', tenant.id),
+        supabase.from('traffic_violations').select('vehicle_id, amount').eq('tenant_id', tenant.id).eq('status', 'pending')
+      ]);
+
+      const vData = vRes.data;
+      const viData = viRes.data;
+
+      if (vData) {
+        const mapped = vData.map((v: any) => {
+          const sum = viData
+            ? viData.filter((vi: any) => vi.vehicle_id === v.id).reduce((s: number, vi: any) => s + vi.amount, 0)
+            : 0;
+          return { ...v, pending_violations_sum: sum };
+        });
+        setVehicles(mapped as Vehicle[]);
+      }
+    } catch (err) {
+      console.error('Error loading vehicles data:', err);
+    }
   }, [tenant]);
 
   useEffect(() => {
@@ -211,7 +304,16 @@ export default function VehiclesPage() {
       {/* VEHICLES GRID */}
       <section className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {filteredVehicles.map((vehicle) => (
-          <Card key={vehicle.id} className="bg-slate-900/60 border-slate-800 hover:border-slate-700 transition-all overflow-hidden flex flex-col justify-between">
+          <Card key={vehicle.id} className="bg-slate-900/60 border-slate-800 hover:border-slate-700 transition-all overflow-hidden flex flex-col justify-between group">
+            {vehicle.image_url && (
+              <div className="w-full h-40 overflow-hidden border-b border-slate-850 relative bg-slate-950">
+                <img
+                  src={vehicle.image_url}
+                  alt={vehicle.model}
+                  className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                />
+              </div>
+            )}
             <div className="p-6 flex flex-col gap-4">
               <div className="flex justify-between items-start">
                 <div>
@@ -256,6 +358,13 @@ export default function VehiclesPage() {
                   <span>مورد خارجي: <strong>{vehicle.external_supplier}</strong></span>
                 </div>
               )}
+
+              {vehicle.pending_violations_sum !== undefined && vehicle.pending_violations_sum > 0 && (
+                <div className="flex items-center gap-2 text-xs text-rose-400 bg-rose-500/5 p-2 rounded-lg border border-rose-500/10">
+                  <AlertTriangle className="w-4 h-4 shrink-0 text-rose-500" />
+                  <span>مخالفات معلقة: <strong>{vehicle.pending_violations_sum.toLocaleString()} {currencySymbol}</strong></span>
+                </div>
+              )}
             </div>
 
             <div className="p-4 bg-slate-950/40 border-t border-slate-800/60 flex justify-end gap-2">
@@ -270,15 +379,133 @@ export default function VehiclesPage() {
 
               <Button
                 variant="outline"
-                className="text-xs h-8 border-slate-800 text-slate-400 hover:text-slate-200"
-                onClick={() => console.log('details')}
+                className="text-xs h-8 border-slate-800 text-emerald-450 hover:text-emerald-400"
+                onClick={() => handleOpenEditModal(vehicle)}
               >
-                التفاصيل
+                تعديل
               </Button>
             </div>
           </Card>
         ))}
       </section>
+
+      {/* EDIT VEHICLE MODAL */}
+      {showEditModal && selectedVehicleToEdit && (
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <Card className="w-full max-w-md bg-slate-900 border-slate-800 shadow-2xl relative text-right" style={{ direction: 'rtl' }}>
+            <button
+              onClick={() => {
+                setShowEditModal(false);
+                setSelectedVehicleToEdit(null);
+              }}
+              className="absolute top-4 left-4 p-1.5 hover:bg-slate-800 rounded-full text-slate-400 transition"
+            >
+              <X className="w-5 h-5" />
+            </button>
+            <CardHeader>
+              <CardTitle className="text-xl font-bold flex items-center gap-2">
+                <Car className="w-5 h-5 text-emerald-400" />
+                تعديل بيانات السيارة
+              </CardTitle>
+              <CardDescription className="text-slate-400 text-xs">
+                تعديل تفاصيل السيارة والمالك والعداد الحالي في قاعدة البيانات
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <form onSubmit={handleUpdateVehicle} className="flex flex-col gap-4">
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-xs text-slate-400 font-semibold">رقم اللوحة</label>
+                    <input
+                      required
+                      type="text"
+                      value={editVehicleState.plate_number}
+                      onChange={(e) => setEditVehicleState(prev => ({ ...prev, plate_number: e.target.value }))}
+                      className="bg-slate-950 border border-slate-850 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none"
+                    />
+                  </div>
+
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-xs text-slate-400 font-semibold">الموديل والماركة</label>
+                    <input
+                      required
+                      type="text"
+                      value={editVehicleState.model}
+                      onChange={(e) => setEditVehicleState(prev => ({ ...prev, model: e.target.value }))}
+                      className="bg-slate-950 border border-slate-850 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-xs text-slate-400 font-semibold">رقم الهوية الوطنية للمالك</label>
+                    <input
+                      required
+                      type="text"
+                      value={editVehicleState.owner_national_id}
+                      onChange={(e) => setEditVehicleState(prev => ({ ...prev, owner_national_id: e.target.value }))}
+                      className="bg-slate-950 border border-slate-850 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none"
+                    />
+                  </div>
+
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-xs text-slate-400 font-semibold">اسم المالك بالكامل</label>
+                    <input
+                      required
+                      type="text"
+                      value={editVehicleState.owner_name}
+                      onChange={(e) => setEditVehicleState(prev => ({ ...prev, owner_name: e.target.value }))}
+                      className="bg-slate-950 border border-slate-850 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-xs text-slate-400 font-semibold">العداد الحالي (كم)</label>
+                    <input
+                      required
+                      type="number"
+                      value={editVehicleState.current_mileage}
+                      onChange={(e) => setEditVehicleState(prev => ({ ...prev, current_mileage: parseInt(e.target.value) || 0 }))}
+                      className="bg-slate-950 border border-slate-850 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none"
+                    />
+                  </div>
+
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-xs text-slate-400 font-semibold">حالة السيارة</label>
+                    <select
+                      value={editVehicleState.status}
+                      onChange={(e) => setEditVehicleState(prev => ({ ...prev, status: e.target.value as Vehicle['status'] }))}
+                      className="bg-slate-950 border border-slate-850 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none"
+                    >
+                      <option value="available">متاحة بالجراج</option>
+                      <option value="in_operation">في أمر تشغيل</option>
+                      <option value="maintenance">في الصيانة</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-xs text-slate-400 font-semibold">اسم المورد الخارجي (اختياري)</label>
+                  <input
+                    type="text"
+                    placeholder="اترك فارغاً إن كانت السيارة تابعة للمكتب"
+                    value={editVehicleState.external_supplier}
+                    onChange={(e) => setEditVehicleState(prev => ({ ...prev, external_supplier: e.target.value }))}
+                    className="bg-slate-950 border border-slate-850 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none"
+                  />
+                </div>
+
+                <Button type="submit" className="w-full bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold py-2.5 mt-2">
+                  حفظ التعديلات
+                </Button>
+              </form>
+            </CardContent>
+          </Card>
+        </div>
+      )}
 
       {/* ADD VEHICLE MODAL */}
       {showAddModal && (

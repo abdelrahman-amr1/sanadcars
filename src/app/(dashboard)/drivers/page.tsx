@@ -28,6 +28,7 @@ interface Driver {
   license_expiry: string;
   phone: string;
   status: 'active' | 'inactive' | 'in_operation';
+  avatar_url?: string | null;
 }
 
 const mockDrivers: Driver[] = [
@@ -42,6 +43,71 @@ export default function DriversPage() {
   const [drivers, setDrivers] = useState<Driver[]>([]);
   const [showAddModal, setShowAddModal] = useState(false);
   const [search, setSearch] = useState('');
+
+  // Edit Driver States
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [selectedDriverToEdit, setSelectedDriverToEdit] = useState<Driver | null>(null);
+  const [editDriverState, setEditDriverState] = useState({
+    name: '',
+    license_number: '',
+    license_expiry: '',
+    phone: '',
+    status: 'active' as Driver['status']
+  });
+
+  const handleOpenEditModal = (driver: Driver) => {
+    setSelectedDriverToEdit(driver);
+    setEditDriverState({
+      name: driver.name || '',
+      license_number: driver.license_number || '',
+      license_expiry: driver.license_expiry || '',
+      phone: driver.phone || '',
+      status: driver.status || 'active'
+    });
+    setShowEditModal(true);
+  };
+
+  const handleUpdateDriver = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedDriverToEdit) return;
+
+    const payload = {
+      name: editDriverState.name,
+      license_number: editDriverState.license_number,
+      license_expiry: editDriverState.license_expiry,
+      phone: editDriverState.phone,
+      status: editDriverState.status
+    };
+
+    if (isDemoMode) {
+      setDrivers(prev => prev.map(d => d.id === selectedDriverToEdit.id ? { ...d, ...payload } : d));
+    } else {
+      if (tenant) {
+        const { error } = await supabase.from('drivers')
+          .update(payload)
+          .eq('id', selectedDriverToEdit.id)
+          .eq('tenant_id', tenant.id);
+          
+        if (error) {
+          alert('حدث خطأ أثناء تعديل بيانات السائق: ' + error.message);
+          return;
+        }
+
+        await logActivity({
+          tenantId: tenant.id,
+          action: 'update',
+          entityType: 'driver',
+          entityName: `تعديل بيانات السائق: ${editDriverState.name} (جوال: ${editDriverState.phone})`,
+          details: payload
+        });
+        
+        loadData();
+      }
+    }
+
+    setShowEditModal(false);
+    setSelectedDriverToEdit(null);
+  };
 
   const [newDriver, setNewDriver] = useState({
     name: '',
@@ -180,11 +246,23 @@ export default function DriversPage() {
               <div className="p-6 flex flex-col gap-4">
                 <div className="flex justify-between items-start">
                   <div>
-                    <h3 className="font-bold text-slate-200 text-lg flex items-center gap-2">
-                      <User className="w-4 h-4 text-emerald-400" />
-                      {driver.name}
+                    <h3 className="font-bold text-slate-200 text-lg flex items-center gap-3">
+                      {driver.avatar_url ? (
+                        <img
+                          src={driver.avatar_url}
+                          alt={driver.name}
+                          className="w-10 h-10 rounded-full object-cover border border-emerald-500/20 shadow-md shrink-0"
+                        />
+                      ) : (
+                        <div className="w-10 h-10 rounded-full bg-slate-800 flex items-center justify-center border border-slate-700 shrink-0">
+                          <User className="w-5 h-5 text-emerald-400" />
+                        </div>
+                      )}
+                      <div>
+                        <span>{driver.name}</span>
+                        <span className="text-xs text-slate-450 block font-normal mt-0.5">رقم السائق الفريد: {driver.id.substring(0, 8)}...</span>
+                      </div>
                     </h3>
-                    <span className="text-xs text-slate-400 mt-1 block">رقم السائق الفريد: {driver.id}</span>
                   </div>
 
                   {driver.status === 'active' && (
@@ -243,8 +321,8 @@ export default function DriversPage() {
               <div className="p-4 bg-slate-950/40 border-t border-slate-800/60 flex justify-end gap-2">
                 <Button
                   variant="outline"
-                  className="text-xs h-8 border-slate-800 text-slate-400 hover:text-slate-200"
-                  onClick={() => console.log('edit')}
+                  className="text-xs h-8 border-slate-800 text-emerald-450 hover:text-emerald-400"
+                  onClick={() => handleOpenEditModal(driver)}
                 >
                   تعديل البيانات
                 </Button>
@@ -327,6 +405,98 @@ export default function DriversPage() {
 
                 <Button type="submit" className="w-full bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold py-2.5 mt-2">
                   تسجيل وإضافة السائق
+                </Button>
+              </form>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+      {/* EDIT DRIVER MODAL */}
+      {showEditModal && selectedDriverToEdit && (
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <Card className="w-full max-w-md bg-slate-900 border-slate-800 shadow-2xl relative text-right" style={{ direction: 'rtl' }}>
+            <button
+              onClick={() => {
+                setShowEditModal(false);
+                setSelectedDriverToEdit(null);
+              }}
+              className="absolute top-4 left-4 p-1.5 hover:bg-slate-800 rounded-full text-slate-400 transition"
+            >
+              <X className="w-5 h-5" />
+            </button>
+            <CardHeader>
+              <CardTitle className="text-xl font-bold flex items-center gap-2">
+                <User className="w-5 h-5 text-emerald-400" />
+                تعديل بيانات السائق
+              </CardTitle>
+              <CardDescription className="text-slate-400 text-xs">
+                تعديل تفاصيل السائق ورقم الرخصة والهاتف في قاعدة البيانات
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <form onSubmit={handleUpdateDriver} className="flex flex-col gap-4">
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-xs text-slate-400 font-semibold">اسم السائق بالكامل</label>
+                  <input
+                    required
+                    type="text"
+                    value={editDriverState.name}
+                    onChange={(e) => setEditDriverState(prev => ({ ...prev, name: e.target.value }))}
+                    className="bg-slate-950 border border-slate-850 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none"
+                  />
+                </div>
+
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-xs text-slate-400 font-semibold">رقم جوال السائق</label>
+                  <input
+                    required
+                    type="text"
+                    value={editDriverState.phone}
+                    onChange={(e) => setEditDriverState(prev => ({ ...prev, phone: e.target.value }))}
+                    className="bg-slate-950 border border-slate-850 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none text-left"
+                    style={{ direction: 'ltr' }}
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-xs text-slate-400 font-semibold">رقم رخصة القيادة</label>
+                    <input
+                      required
+                      type="text"
+                      value={editDriverState.license_number}
+                      onChange={(e) => setEditDriverState(prev => ({ ...prev, license_number: e.target.value }))}
+                      className="bg-slate-950 border border-slate-850 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none"
+                    />
+                  </div>
+
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-xs text-slate-400 font-semibold">تاريخ انتهاء الرخصة</label>
+                    <input
+                      required
+                      type="date"
+                      value={editDriverState.license_expiry}
+                      onChange={(e) => setEditDriverState(prev => ({ ...prev, license_expiry: e.target.value }))}
+                      className="bg-slate-950 border border-slate-850 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-xs text-slate-400 font-semibold">حالة السائق</label>
+                  <select
+                    value={editDriverState.status}
+                    onChange={(e) => setEditDriverState(prev => ({ ...prev, status: e.target.value as Driver['status'] }))}
+                    className="bg-slate-950 border border-slate-850 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none"
+                  >
+                    <option value="active">نشط ومتاح</option>
+                    <option value="inactive">غير نشط / إجازة</option>
+                    <option value="in_operation">في رحلة عمل</option>
+                  </select>
+                </div>
+
+                <Button type="submit" className="w-full bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold py-2.5 mt-2">
+                  حفظ التعديلات
                 </Button>
               </form>
             </CardContent>

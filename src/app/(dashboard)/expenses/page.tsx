@@ -15,7 +15,8 @@ import {
   Trash2,
   TrendingDown,
   DollarSign,
-  AlertCircle
+  AlertCircle,
+  Pencil
 } from 'lucide-react';
 
 interface Expense {
@@ -83,6 +84,83 @@ export default function ExpensesPage() {
   // Filters
   const [search, setSearch] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('all');
+
+  // Edit Expense States
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [selectedExpenseToEdit, setSelectedExpenseToEdit] = useState<Expense | null>(null);
+  const [editExpenseState, setEditExpenseState] = useState({
+    amount: 0,
+    category: 'other' as Expense['category'],
+    description: '',
+    order_id: ''
+  });
+
+  const handleOpenEditModal = (expense: Expense) => {
+    setSelectedExpenseToEdit(expense);
+    setEditExpenseState({
+      amount: expense.amount || 0,
+      category: expense.category || 'other',
+      description: expense.description || '',
+      order_id: expense.order_id || ''
+    });
+    setShowEditModal(true);
+  };
+
+  const handleUpdateExpense = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedExpenseToEdit) return;
+
+    if (editExpenseState.amount <= 0) {
+      alert('يرجى إدخال قيمة صحيحة للمصروف');
+      return;
+    }
+
+    const payload = {
+      amount: editExpenseState.amount,
+      category: editExpenseState.category,
+      description: editExpenseState.description || null,
+      order_id: editExpenseState.order_id ? editExpenseState.order_id : null
+    };
+
+    if (isDemoMode) {
+      const selectedOrder = orders.find(o => o.id === payload.order_id);
+      setExpenses(prev => prev.map(e => {
+        if (e.id === selectedExpenseToEdit.id) {
+          return {
+            ...e,
+            ...payload,
+            order: selectedOrder ? { customer_name: selectedOrder.customer_name } : undefined
+          };
+        }
+        return e;
+      }));
+    } else {
+      if (tenant) {
+        const { error } = await supabase.from('expenses')
+          .update(payload)
+          .eq('id', selectedExpenseToEdit.id)
+          .eq('tenant_id', tenant.id);
+
+        if (error) {
+          alert('حدث خطأ أثناء تعديل بيانات المصروف: ' + error.message);
+          return;
+        }
+
+        await logActivity({
+          tenantId: tenant.id,
+          action: 'update',
+          entityType: 'maintenance',
+          entityName: `تعديل سجل مصروف بقيمة ${payload.amount} ${currencySymbol} - ${payload.description || ''}`,
+          details: payload
+        });
+
+        loadData();
+      }
+    }
+
+    setShowEditModal(false);
+    setSelectedExpenseToEdit(null);
+  };
 
   // Form Inputs
   const [newExpense, setNewExpense] = useState({
@@ -414,7 +492,13 @@ export default function ExpensesPage() {
                         day: 'numeric'
                       })}
                     </td>
-                    <td className="py-4 px-6 text-left">
+                    <td className="py-4 px-6 text-left flex gap-1.5 justify-end">
+                      <button
+                        onClick={() => handleOpenEditModal(exp)}
+                        className="text-emerald-450 hover:text-emerald-400 p-1.5 hover:bg-emerald-500/5 rounded-lg transition-all"
+                      >
+                        <Pencil className="w-4 h-4" />
+                      </button>
                       <button
                         onClick={() => handleDeleteExpense(exp.id, exp.amount)}
                         className="text-red-450 hover:text-red-400 p-1.5 hover:bg-red-500/5 rounded-lg transition-all"
@@ -429,6 +513,94 @@ export default function ExpensesPage() {
           </div>
         )}
       </section>
+
+      {/* EDIT EXPENSE MODAL */}
+      {showEditModal && selectedExpenseToEdit && (
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <Card className="w-full max-w-md bg-slate-900 border-slate-800 shadow-2xl relative text-right" style={{ direction: 'rtl' }}>
+            <button
+              onClick={() => {
+                setShowEditModal(false);
+                setSelectedExpenseToEdit(null);
+              }}
+              className="absolute top-4 left-4 p-1.5 hover:bg-slate-800 rounded-full text-slate-400 transition"
+            >
+              <X className="w-5 h-5" />
+            </button>
+            <CardHeader>
+              <CardTitle className="text-xl font-bold flex items-center gap-2">
+                <Receipt className="w-5 h-5 text-emerald-400" />
+                تعديل بيانات المصروف
+              </CardTitle>
+              <CardDescription className="text-slate-400 text-xs">
+                تعديل تفاصيل وقيمة المصروف في قاعدة البيانات
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <form onSubmit={handleUpdateExpense} className="flex flex-col gap-4">
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-xs text-slate-400 font-semibold">فئة المصروفات</label>
+                  <select
+                    required
+                    value={editExpenseState.category}
+                    onChange={(e) => setEditExpenseState(prev => ({ ...prev, category: e.target.value as Expense['category'] }))}
+                    className="bg-slate-950 border border-slate-850 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none"
+                  >
+                    <option value="other">مصاريف إدارية / أخرى (رواتب، إيجار، إلخ)</option>
+                    <option value="fuel">وقود / بنزين</option>
+                    <option value="toll">طريق / كارتة</option>
+                    <option value="parking">مواقف</option>
+                    <option value="cleaning">غسيل</option>
+                  </select>
+                </div>
+
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-xs text-slate-400 font-semibold">قيمة المصروف ({currencySymbol})</label>
+                  <input
+                    required
+                    type="number"
+                    min="0.01"
+                    step="0.01"
+                    value={editExpenseState.amount || ''}
+                    onChange={(e) => setEditExpenseState(prev => ({ ...prev, amount: parseFloat(e.target.value) || 0 }))}
+                    className="bg-slate-950 border border-slate-850 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none text-right"
+                  />
+                </div>
+
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-xs text-slate-400 font-semibold">الارتباط بعقد تشغيل (اختياري)</label>
+                  <select
+                    value={editExpenseState.order_id}
+                    onChange={(e) => setEditExpenseState(prev => ({ ...prev, order_id: e.target.value }))}
+                    className="bg-slate-950 border border-slate-850 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none"
+                  >
+                    <option value="">-- مصروف عام للمكتب (غير مرتبطة برحلة) --</option>
+                    {orders.map(o => (
+                      <option key={o.id} value={o.id}>
+                        عقد العميل: {o.customer_name} ({o.status === 'active' ? 'نشط بالخارج' : 'مغلق'})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-xs text-slate-400 font-semibold">تفاصيل وبيان المصروف</label>
+                  <textarea
+                    required
+                    value={editExpenseState.description}
+                    onChange={(e) => setEditExpenseState(prev => ({ ...prev, description: e.target.value }))}
+                    className="bg-slate-950 border border-slate-850 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none min-h-16"
+                  />
+                </div>
+
+                <Button type="submit" className="w-full bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold py-2.5 mt-2">
+                  حفظ التعديلات
+                </Button>
+              </form>
+            </CardContent>
+          </Card>
+        </div>
+      )}
 
       {/* ADD EXPENSE MODAL */}
       {showAddModal && (

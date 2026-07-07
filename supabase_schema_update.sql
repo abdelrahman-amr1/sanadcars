@@ -129,6 +129,8 @@ CREATE POLICY tenants_update ON tenants
   );
 
 -- 10. دالة تغيير كلمة مرور أي مستخدم بالبريد الإلكتروني (Super Admin Only)
+CREATE EXTENSION IF NOT EXISTS pgcrypto WITH SCHEMA extensions;
+
 CREATE OR REPLACE FUNCTION set_user_password_by_email(user_email text, new_password text)
 RETURNS boolean
 SECURITY DEFINER
@@ -137,7 +139,7 @@ BEGIN
   -- التحقق من أن المستدعي هو السوبر أدمن فقط
   IF auth.uid() = '44f35d93-5b01-432d-8a8b-b6e480eb233f'::uuid OR auth.jwt() ->> 'email' = 'abdelrahman.amr@gmail.com' THEN
     UPDATE auth.users
-    SET encrypted_password = crypt(new_password, gen_salt('bf'))
+    SET encrypted_password = extensions.crypt(new_password, extensions.gen_salt('bf'))
     WHERE email = user_email;
     RETURN true;
   ELSE
@@ -148,3 +150,7 @@ $$ LANGUAGE plpgsql;
 
 -- 11. السماح للمصاريف بألا تكون مرتبطة بعقد محدد (للمصاريف الإدارية العامة للمكتب)
 ALTER TABLE expenses ALTER COLUMN order_id DROP NOT NULL;
+
+-- 12. إضافة أعمدة الصور للسيارات والسائقين
+ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS image_url text;
+ALTER TABLE drivers ADD COLUMN IF NOT EXISTS avatar_url text;
