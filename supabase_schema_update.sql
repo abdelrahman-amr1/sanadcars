@@ -1,4 +1,4 @@
--- 1. إنشاء جدول طلبات الانضمام
+-- 1. إنشاء جدول طلبات الانضمام المعلقة
 CREATE TABLE IF NOT EXISTS tenant_requests (
   id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
   company_name text NOT NULL,
@@ -17,17 +17,17 @@ CREATE TABLE IF NOT EXISTS audit_logs (
   user_id uuid REFERENCES auth.users(id) ON DELETE SET NULL,
   user_email text NOT NULL,
   action text NOT NULL, -- 'create' | 'update' | 'delete'
-  entity_type text NOT NULL, -- 'vehicle' | 'driver' | 'order' | 'violation' | 'maintenance' | 'member'
+  entity_type text NOT NULL,
   entity_name text NOT NULL,
   details jsonb,
   created_at timestamp with time zone DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
--- 3. إضافة أعمدة التخصيص لجدول tenants
+-- 3. إضافة أعمدة ألوان المظهر والوضع الداكن لجدول المكاتب
 ALTER TABLE tenants ADD COLUMN IF NOT EXISTS primary_color text DEFAULT 'emerald';
 ALTER TABLE tenants ADD COLUMN IF NOT EXISTS dark_mode boolean DEFAULT true;
 
--- 4. تفعيل RLS على الجداول الجديدة
+-- 4. تفعيل RLS على الجداول الجديدة للحماية
 ALTER TABLE tenant_requests ENABLE ROW LEVEL SECURITY;
 ALTER TABLE audit_logs ENABLE ROW LEVEL SECURITY;
 
@@ -89,3 +89,26 @@ SELECT
   u.email AS user_email
 FROM tenant_members tm
 JOIN auth.users u ON tm.user_id = u.id;
+
+-- 9. إعداد سياسات الأمان لجدول المكاتب (tenants)
+ALTER TABLE tenants ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS tenants_select ON tenants;
+CREATE POLICY tenants_select ON tenants
+  FOR SELECT TO authenticated
+  USING (
+    id IN (SELECT tenant_id FROM tenant_members WHERE user_id = auth.uid())
+    OR auth.jwt() ->> 'email' = 'abdelrahman.amr@gmail.com'
+  );
+
+DROP POLICY IF EXISTS tenants_update ON tenants;
+CREATE POLICY tenants_update ON tenants
+  FOR UPDATE TO authenticated
+  USING (
+    id IN (SELECT tenant_id FROM tenant_members WHERE user_id = auth.uid() AND role IN ('owner', 'admin'))
+    OR auth.jwt() ->> 'email' = 'abdelrahman.amr@gmail.com'
+  )
+  WITH CHECK (
+    id IN (SELECT tenant_id FROM tenant_members WHERE user_id = auth.uid() AND role IN ('owner', 'admin'))
+    OR auth.jwt() ->> 'email' = 'abdelrahman.amr@gmail.com'
+  );
