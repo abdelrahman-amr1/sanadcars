@@ -129,38 +129,41 @@ export default function ReportsPage() {
 
   // 1. Monthly Report Logic
   const getMonthlyReport = () => {
-    const reportMap: Record<string, { monthKey: string; revenue: number; orderCosts: number; generalExpenses: number; profit: number; orderCount: number }> = {};
+    const reportMap: Record<string, { monthKey: string; revenue: number; orderCosts: number; tripExpenses: number; generalExpenses: number; rawOrderProfit: number; orderCount: number }> = {};
 
     // Group orders
     orders.forEach(order => {
       const dateStr = order.actual_out_date || order.expected_out_date;
       if (!dateStr) return;
-      const monthKey = dateStr.substring(0, 7); // "YYYY-MM"
+      const monthKey = dateStr.substring(0, 7);
 
       if (!reportMap[monthKey]) {
-        reportMap[monthKey] = { monthKey, revenue: 0, orderCosts: 0, generalExpenses: 0, profit: 0, orderCount: 0 };
+        reportMap[monthKey] = { monthKey, revenue: 0, orderCosts: 0, tripExpenses: 0, generalExpenses: 0, rawOrderProfit: 0, orderCount: 0 };
       }
       reportMap[monthKey].revenue += order.amount_received_from_customer;
       reportMap[monthKey].orderCosts += order.amount_paid_to_external_supplier;
-      reportMap[monthKey].profit += order.net_profit;
+      // net_profit stored in DB = amount_received - amount_paid_supplier (does NOT include trip expenses)
+      // So raw profit before any expense deduction:
+      reportMap[monthKey].rawOrderProfit += (order.amount_received_from_customer - order.amount_paid_to_external_supplier);
       if (order.status === 'closed' || order.status === 'active') {
         reportMap[monthKey].orderCount += 1;
       }
     });
 
-    // Group general expenses (not linked to an order, or linked - to avoid double counting, general expenses are all expenses)
+    // Group ALL expenses by month
     expenses.forEach(exp => {
       const dateStr = exp.created_at;
       if (!dateStr) return;
       const monthKey = dateStr.substring(0, 7);
 
       if (!reportMap[monthKey]) {
-        reportMap[monthKey] = { monthKey, revenue: 0, orderCosts: 0, generalExpenses: 0, profit: 0, orderCount: 0 };
+        reportMap[monthKey] = { monthKey, revenue: 0, orderCosts: 0, tripExpenses: 0, generalExpenses: 0, rawOrderProfit: 0, orderCount: 0 };
       }
-      // If order_id is null, it's a general expense.
-      // In our net_profit formula on order settlement, we already subtracted order-linked expenses from net_profit, 
-      // so general expenses represent general administrative costs.
-      if (!exp.order_id) {
+      if (exp.order_id) {
+        // Trip expenses (fuel, toll, etc. linked to specific orders)
+        reportMap[monthKey].tripExpenses += exp.amount;
+      } else {
+        // General expenses (admin costs not linked to any order)
         reportMap[monthKey].generalExpenses += exp.amount;
       }
     });
@@ -168,13 +171,12 @@ export default function ReportsPage() {
     // Convert map to sorted array (newest month first)
     const sortedReports = Object.values(reportMap).sort((a, b) => b.monthKey.localeCompare(a.monthKey));
     
-    // Adjust final profit after general expenses
+    // CORRECT profit formula:
+    // finalProfit = revenue - supplierCosts - tripExpenses - generalExpenses
     return sortedReports.map(r => ({
       ...r,
-      finalProfit: r.revenue - r.orderCosts - r.generalExpenses - (r.revenue - r.orderCosts - r.profit)
-      // Wait, net profit is already: amount_received - amount_paid_supplier - order_expenses.
-      // So final net profit = (sum of net_profit of all orders) - (sum of general expenses).
-      // Let's use: final profit = r.profit - r.generalExpenses
+      profit: r.rawOrderProfit, // before deducting expenses
+      finalProfit: r.rawOrderProfit - r.tripExpenses - r.generalExpenses
     }));
   };
 
@@ -236,15 +238,17 @@ export default function ReportsPage() {
     const totalRuns = vehOrders.length;
     const totalRevenue = vehOrders.reduce((sum, o) => sum + o.amount_received_from_customer, 0);
     const totalSupplierCosts = vehOrders.reduce((sum, o) => sum + o.amount_paid_to_external_supplier, 0);
-    const orderProfit = vehOrders.reduce((sum, o) => sum + o.net_profit, 0);
 
-    // Filter expenses linked to this vehicle's orders
-    const vehExpenses = expenses.filter(e => e.order_id && vehOrderIds.has(e.order_id));
-    const totalExpenses = vehExpenses.reduce((sum, e) => sum + e.amount, 0);
+    // CORRECT: gross profit before expenses
+    const grossProfit = totalRevenue - totalSupplierCosts;
+
+    // ALL expenses linked to this vehicle's orders (fuel, toll, etc.)
+    const vehTripExpenses = expenses.filter(e => e.order_id && vehOrderIds.has(e.order_id));
+    const totalTripExpenses = vehTripExpenses.reduce((sum, e) => sum + e.amount, 0);
 
     // Expenses categorized
     const expensesByCategory: Record<string, number> = { fuel: 0, cleaning: 0, parking: 0, toll: 0, other: 0 };
-    vehExpenses.forEach(e => {
+    vehTripExpenses.forEach(e => {
       expensesByCategory[e.category] = (expensesByCategory[e.category] || 0) + e.amount;
     });
 
@@ -253,14 +257,15 @@ export default function ReportsPage() {
     const pendingViolationsAmount = vehViolations.filter(vi => vi.status === 'pending').reduce((sum, vi) => sum + vi.amount, 0);
     const paidViolationsAmount = vehViolations.filter(vi => vi.status === 'paid').reduce((sum, vi) => sum + vi.amount, 0);
 
-    const netProfit = orderProfit - pendingViolationsAmount; // Subtract pending violations from final profit
+    // CORRECT: net profit = revenue - supplier costs - trip expenses - violations
+    const netProfit = grossProfit - totalTripExpenses - pendingViolationsAmount;
 
     return {
       vehicle: veh,
       totalRuns,
       totalRevenue,
       totalSupplierCosts,
-      totalExpenses,
+      totalExpenses: totalTripExpenses,
       expensesByCategory,
       pendingViolationsAmount,
       paidViolationsAmount,
@@ -273,12 +278,15 @@ export default function ReportsPage() {
   const getDashboardData = () => {
     const totalRevenue = orders.reduce((sum, o) => sum + o.amount_received_from_customer, 0);
     const totalSupplierCosts = orders.reduce((sum, o) => sum + o.amount_paid_to_external_supplier, 0);
+    
+    // ALL expenses split by type
     const totalGeneralExpenses = expenses.filter(e => !e.order_id).reduce((sum, e) => sum + e.amount, 0);
     const totalTripExpenses = expenses.filter(e => e.order_id).reduce((sum, e) => sum + e.amount, 0);
+    const totalAllExpenses = totalGeneralExpenses + totalTripExpenses;
     
-    // Net profit of orders minus general administrative expenses
-    const orderNetProfit = orders.reduce((sum, o) => sum + o.net_profit, 0);
-    const netProfit = orderNetProfit - totalGeneralExpenses;
+    // CORRECT profit formula:
+    // netProfit = revenue - supplierCosts - tripExpenses - generalExpenses
+    const netProfit = totalRevenue - totalSupplierCosts - totalAllExpenses;
     
     // Profit margin percentage
     const profitMargin = totalRevenue > 0 ? Math.round((netProfit / totalRevenue) * 100) : 0;
@@ -305,15 +313,16 @@ export default function ReportsPage() {
         vehicleProfitMap[vId] = { vehicle: vehicleObj, revenue: 0, profit: 0, runs: 0 };
       }
       vehicleProfitMap[vId].revenue += order.amount_received_from_customer;
-      vehicleProfitMap[vId].profit += order.net_profit;
+      // Vehicle profit = revenue - supplier cost (trip expenses are shared across all vehicles)
+      vehicleProfitMap[vId].profit += (order.amount_received_from_customer - order.amount_paid_to_external_supplier);
       vehicleProfitMap[vId].runs += 1;
     });
     
     const topVehicles = Object.values(vehicleProfitMap)
       .sort((a, b) => b.profit - a.profit)
-      .slice(0, 5); // top 5
+      .slice(0, 5);
       
-    // Expense categories summary
+    // Expense categories summary (ALL expenses, both trip and general)
     const expenseCats: Record<string, number> = { fuel: 0, toll: 0, parking: 0, cleaning: 0, other: 0 };
     expenses.forEach(e => {
       expenseCats[e.category] = (expenseCats[e.category] || 0) + e.amount;
@@ -321,6 +330,10 @@ export default function ReportsPage() {
     
     return {
       totalRevenue,
+      totalSupplierCosts,
+      totalGeneralExpenses,
+      totalTripExpenses,
+      totalAllExpenses,
       netProfit,
       profitMargin,
       pendingViolations,

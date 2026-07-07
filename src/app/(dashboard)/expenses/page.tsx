@@ -320,6 +320,12 @@ export default function ExpensesPage() {
 
   const totalAllExpenses = totalGeneralExpenses + totalTripExpenses;
 
+  // Category breakdown (ALL expenses combined)
+  const categoryTotals: Record<string, number> = { fuel: 0, toll: 0, parking: 0, cleaning: 0, other: 0 };
+  expenses.forEach(e => {
+    categoryTotals[e.category] = (categoryTotals[e.category] || 0) + e.amount;
+  });
+
   // Filter Logic
   const filteredExpenses = expenses.filter(e => {
     const matchesSearch = e.description?.toLowerCase().includes(search.toLowerCase()) || false;
@@ -348,53 +354,92 @@ export default function ExpensesPage() {
         </Button>
       </header>
 
-      {/* METRICS CARDS */}
-      <section className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      {/* METRICS CARDS - 5 cards */}
+      <section className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+        {/* General */}
         <Card className="bg-slate-900/60 border-slate-800 backdrop-blur-lg">
           <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
-            <CardTitle className="text-sm font-semibold text-slate-400">المصاريف الإدارية العامة</CardTitle>
-            <div className="p-2 rounded-lg border border-rose-500/20 bg-rose-500/10 text-rose-500">
-              <TrendingDown className="h-5 w-5" />
+            <CardTitle className="text-xs font-semibold text-slate-400">مصاريف إدارية</CardTitle>
+            <div className="p-1.5 rounded-lg border border-rose-500/20 bg-rose-500/10 text-rose-400">
+              <TrendingDown className="h-4 w-4" />
             </div>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-black text-slate-100 flex items-baseline gap-1">
+            <div className="text-xl font-black text-slate-100 flex items-baseline gap-1">
               {totalGeneralExpenses.toLocaleString()}
               <span className="text-xs font-normal text-slate-500">{currencySymbol}</span>
             </div>
-            <p className="text-[10px] text-slate-500 mt-1">المصاريف غير المرتبطة بالرحلات (كالإيجارات والرواتب)</p>
+            <p className="text-[10px] text-slate-500 mt-1">بدون ارتباط برحلة</p>
           </CardContent>
         </Card>
 
+        {/* Trip */}
         <Card className="bg-slate-900/60 border-slate-800 backdrop-blur-lg">
           <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
-            <CardTitle className="text-sm font-semibold text-slate-400">المصاريف النثرية للرحلات</CardTitle>
-            <div className="p-2 rounded-lg border border-amber-500/20 bg-amber-500/10 text-amber-500">
-              <TrendingDown className="h-5 w-5" />
+            <CardTitle className="text-xs font-semibold text-slate-400">نثريات رحلات</CardTitle>
+            <div className="p-1.5 rounded-lg border border-amber-500/20 bg-amber-500/10 text-amber-400">
+              <TrendingDown className="h-4 w-4" />
             </div>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-black text-slate-100 flex items-baseline gap-1">
+            <div className="text-xl font-black text-slate-100 flex items-baseline gap-1">
               {totalTripExpenses.toLocaleString()}
               <span className="text-xs font-normal text-slate-500">{currencySymbol}</span>
             </div>
-            <p className="text-[10px] text-slate-500 mt-1">وقود ورسوم طرق تم صرفها أثناء الرحلات وسويت مالياً</p>
+            <p className="text-[10px] text-slate-500 mt-1">مرتبطة بأوامر تشغيل</p>
           </CardContent>
         </Card>
 
-        <Card className="bg-slate-900/60 border-slate-800 backdrop-blur-lg">
+        {/* Fuel */}
+        <Card className="bg-slate-900/60 border-orange-900/30 border backdrop-blur-lg">
           <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
-            <CardTitle className="text-sm font-semibold text-slate-400">إجمالي التكاليف والمصروفات</CardTitle>
-            <div className="p-2 rounded-lg border border-slate-700 bg-slate-800 text-slate-300">
-              <DollarSign className="h-5 w-5" />
+            <CardTitle className="text-xs font-semibold text-orange-400">وقود / بنزين</CardTitle>
+            <div className="p-1.5 rounded-lg border border-orange-500/20 bg-orange-500/10 text-orange-400">
+              <Receipt className="h-4 w-4" />
             </div>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-black text-slate-100 flex items-baseline gap-1">
+            <div className="text-xl font-black text-orange-400 flex items-baseline gap-1">
+              {categoryTotals.fuel.toLocaleString()}
+              <span className="text-xs font-normal text-slate-500">{currencySymbol}</span>
+            </div>
+            <p className="text-[10px] text-slate-500 mt-1">
+              {totalAllExpenses > 0 ? Math.round((categoryTotals.fuel / totalAllExpenses) * 100) : 0}% من الإجمالي
+            </p>
+          </CardContent>
+        </Card>
+
+        {/* Toll + Parking */}
+        <Card className="bg-slate-900/60 border-slate-800 backdrop-blur-lg">
+          <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
+            <CardTitle className="text-xs font-semibold text-slate-400">رسوم ومواقف</CardTitle>
+            <div className="p-1.5 rounded-lg border border-blue-500/20 bg-blue-500/10 text-blue-400">
+              <Receipt className="h-4 w-4" />
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="text-xl font-black text-blue-400 flex items-baseline gap-1">
+              {(categoryTotals.toll + categoryTotals.parking).toLocaleString()}
+              <span className="text-xs font-normal text-slate-500">{currencySymbol}</span>
+            </div>
+            <p className="text-[10px] text-slate-500 mt-1">طرق سريعة ومواقف سيارات</p>
+          </CardContent>
+        </Card>
+
+        {/* Total */}
+        <Card className="bg-slate-900/60 border-emerald-900/40 border backdrop-blur-lg">
+          <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
+            <CardTitle className="text-xs font-semibold text-emerald-400">إجمالي المصروفات</CardTitle>
+            <div className="p-1.5 rounded-lg border border-emerald-500/20 bg-emerald-500/10 text-emerald-400">
+              <DollarSign className="h-4 w-4" />
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="text-xl font-black text-emerald-400 flex items-baseline gap-1">
               {totalAllExpenses.toLocaleString()}
               <span className="text-xs font-normal text-slate-500">{currencySymbol}</span>
             </div>
-            <p className="text-[10px] text-slate-500 mt-1">مجموع كل ما تم صرفه من الفرع</p>
+            <p className="text-[10px] text-slate-500 mt-1">كل مصاريف الفرع</p>
           </CardContent>
         </Card>
       </section>
