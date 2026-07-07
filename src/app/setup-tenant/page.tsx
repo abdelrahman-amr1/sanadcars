@@ -188,7 +188,7 @@ export default function SetupTenantPage() {
       <Card className="w-full max-w-md bg-slate-900/60 border-slate-800 backdrop-blur-xl shadow-2xl relative text-right">
         <CardHeader className="text-center pt-8">
           <div className="mx-auto w-12 h-12 rounded-2xl bg-gradient-to-tr from-emerald-500 to-teal-400 flex items-center justify-center font-black text-slate-950 text-2xl shadow-lg shadow-emerald-500/25 mb-4">
-            FF
+            SC
           </div>
           <CardTitle className="text-2xl font-black text-slate-100 flex justify-center items-center gap-2">
             طلب الانضمام للمنصة

@@ -37,6 +37,7 @@ CREATE POLICY requests_select ON tenant_requests
   FOR SELECT TO authenticated
   USING (
     auth.uid() = user_id 
+    OR auth.uid() = '44f35d93-5b01-432d-8a8b-b6e480eb233f'::uuid
     OR auth.jwt() ->> 'email' = 'abdelrahman.amr@gmail.com'
   );
 
@@ -48,8 +49,14 @@ CREATE POLICY requests_insert ON tenant_requests
 DROP POLICY IF EXISTS requests_update ON tenant_requests;
 CREATE POLICY requests_update ON tenant_requests
   FOR UPDATE TO authenticated
-  USING (auth.jwt() ->> 'email' = 'abdelrahman.amr@gmail.com')
-  WITH CHECK (auth.jwt() ->> 'email' = 'abdelrahman.amr@gmail.com');
+  USING (
+    auth.uid() = '44f35d93-5b01-432d-8a8b-b6e480eb233f'::uuid
+    OR auth.jwt() ->> 'email' = 'abdelrahman.amr@gmail.com'
+  )
+  WITH CHECK (
+    auth.uid() = '44f35d93-5b01-432d-8a8b-b6e480eb233f'::uuid
+    OR auth.jwt() ->> 'email' = 'abdelrahman.amr@gmail.com'
+  );
 
 -- 6. إعداد سياسات الأمان لجدول سجل الحركة (audit_logs)
 DROP POLICY IF EXISTS logs_select ON audit_logs;
@@ -57,6 +64,7 @@ CREATE POLICY logs_select ON audit_logs
   FOR SELECT TO authenticated
   USING (
     tenant_id IN (SELECT tenant_id FROM tenant_members WHERE user_id = auth.uid())
+    OR auth.uid() = '44f35d93-5b01-432d-8a8b-b6e480eb233f'::uuid
     OR auth.jwt() ->> 'email' = 'abdelrahman.amr@gmail.com'
   );
 
@@ -65,6 +73,7 @@ CREATE POLICY logs_insert ON audit_logs
   FOR INSERT TO authenticated
   WITH CHECK (
     tenant_id IN (SELECT tenant_id FROM tenant_members WHERE user_id = auth.uid())
+    OR auth.uid() = '44f35d93-5b01-432d-8a8b-b6e480eb233f'::uuid
     OR auth.jwt() ->> 'email' = 'abdelrahman.amr@gmail.com'
   );
 
@@ -98,6 +107,7 @@ CREATE POLICY tenants_select ON tenants
   FOR SELECT TO authenticated
   USING (
     id IN (SELECT tenant_id FROM tenant_members WHERE user_id = auth.uid())
+    OR auth.uid() = '44f35d93-5b01-432d-8a8b-b6e480eb233f'::uuid
     OR auth.jwt() ->> 'email' = 'abdelrahman.amr@gmail.com'
   );
 
@@ -106,9 +116,11 @@ CREATE POLICY tenants_update ON tenants
   FOR UPDATE TO authenticated
   USING (
     id IN (SELECT tenant_id FROM tenant_members WHERE user_id = auth.uid() AND role IN ('owner', 'admin'))
+    OR auth.uid() = '44f35d93-5b01-432d-8a8b-b6e480eb233f'::uuid
     OR auth.jwt() ->> 'email' = 'abdelrahman.amr@gmail.com'
   )
   WITH CHECK (
     id IN (SELECT tenant_id FROM tenant_members WHERE user_id = auth.uid() AND role IN ('owner', 'admin'))
+    OR auth.uid() = '44f35d93-5b01-432d-8a8b-b6e480eb233f'::uuid
     OR auth.jwt() ->> 'email' = 'abdelrahman.amr@gmail.com'
   );

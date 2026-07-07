@@ -201,7 +201,7 @@ export default function SuperAdminPage() {
 
   // Approve Onboarding Join Request
   const handleApproveRequest = async (req: TenantRequest) => {
-    if (!confirm(`هل أنت متأكد من تفعيل مكتب "${req.company_name}" وتعيين "${req.full_name}" كمالك له؟`)) return;
+    if (!confirm(`هل أنت متأكد من تفعيل مكتب "${req.company_name}" وتعيين "${req.full_name}" كمالك له؟\n\nرقم جوال العميل: ${req.phone}`)) return;
     setDataLoading(true);
     try {
       // 1. Create the tenant/office
