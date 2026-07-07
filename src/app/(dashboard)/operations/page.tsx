@@ -124,7 +124,7 @@ const mockOrders: OperationOrder[] = [
 ];
 
 export default function OperationsPage() {
-  const { tenant, isDemoMode } = useTenant();
+  const { tenant, isDemoMode, currencySymbol } = useTenant();
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [drivers, setDrivers] = useState<Driver[]>([]);
   const [orders, setOrders] = useState<OperationOrder[]>([]);
@@ -482,7 +482,7 @@ export default function OperationsPage() {
                 <div className="text-left w-full">
                   <span className="text-xs text-slate-500 block">صافي ربح الرحلة:</span>
                   <span className="text-xl font-black text-emerald-400 mt-1 block">
-                    {order.status === 'closed' ? `${order.net_profit} ر.س` : 'قيد التشغيل...'}
+                    {order.status === 'closed' ? `${order.net_profit} ${currencySymbol}` : 'قيد التشغيل...'}
                   </span>
                 </div>
 
@@ -648,7 +648,7 @@ export default function OperationsPage() {
                   </div>
 
                   <div className="flex flex-col gap-1.5">
-                    <label className="text-xs text-slate-400 font-semibold">المبلغ المستلم من العميل (ر.س)</label>
+                    <label className="text-xs text-slate-400 font-semibold">المبلغ المستلم من العميل ({currencySymbol})</label>
                     <input
                       required
                       type="number"
@@ -722,7 +722,7 @@ export default function OperationsPage() {
                     <div className="bg-slate-950 p-2 rounded-lg flex flex-col gap-1.5 max-h-24 overflow-y-auto">
                       {settlement.expenses.map((exp, idx) => (
                         <div key={idx} className="flex justify-between items-center text-xs text-slate-300">
-                          <span>{exp.category === 'fuel' ? 'وقود' : exp.category === 'toll' ? 'طريق' : 'أخرى'} - {exp.amount} ر.س</span>
+                          <span>{exp.category === 'fuel' ? 'وقود' : exp.category === 'toll' ? 'طريق' : 'أخرى'} - {exp.amount} {currencySymbol}</span>
                           <button
                             type="button"
                             onClick={() => handleRemoveExpense(idx)}
@@ -744,7 +744,7 @@ export default function OperationsPage() {
                       settlement.amount_paid_supplier -
                       settlement.expenses.reduce((sum, e) => sum + e.amount, 0)
                     ).toLocaleString()}{' '}
-                    ر.س
+                    {currencySymbol}
                   </span>
                 </div>
 

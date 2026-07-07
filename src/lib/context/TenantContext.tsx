@@ -41,6 +41,7 @@ interface TenantContextType {
   logout: () => Promise<void>;
   refreshTenant: () => Promise<void>;
   createTenant: (name: string) => Promise<Tenant | null>;
+  currencySymbol: string;
   submitJoinRequest: (companyName: string, fullName: string, phone: string, currency: string) => Promise<TenantRequest | null>;
 }
 
@@ -330,6 +331,24 @@ export function TenantProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const getCurrencySymbol = (code?: string) => {
+    const symbols: Record<string, string> = {
+      SAR: 'ر.س',
+      EGP: 'ج.م',
+      AED: 'د.إ',
+      QAR: 'ر.ق',
+      KWD: 'د.ك',
+      OMR: 'ر.ع',
+      BHD: 'د.ب',
+      JOD: 'د.أ',
+      USD: '$',
+      EUR: '€'
+    };
+    return symbols[code || 'SAR'] || 'ر.س';
+  };
+
+  const currencySymbol = getCurrencySymbol(tenant?.currency);
+
   const isSuperAdmin = user?.email === 'abdelrahman.amr@gmail.com';
 
   return (
@@ -352,6 +371,7 @@ export function TenantProvider({ children }: { children: React.ReactNode }) {
         refreshTenant,
         createTenant,
         submitJoinRequest,
+        currencySymbol,
       }}
     >
       {children}

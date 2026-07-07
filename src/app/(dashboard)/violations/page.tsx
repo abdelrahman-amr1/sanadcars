@@ -65,7 +65,7 @@ const mockViolations: Violation[] = [
 ];
 
 export default function ViolationsPage() {
-  const { tenant, isDemoMode } = useTenant();
+  const { tenant, isDemoMode, currencySymbol } = useTenant();
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [violations, setViolations] = useState<Violation[]>([]);
   const [showAddModal, setShowAddModal] = useState(false);
@@ -140,7 +140,7 @@ export default function ViolationsPage() {
           tenantId: tenant.id,
           action: 'create',
           entityType: 'violation',
-          entityName: `رصد مخالفة مرورية رقم: ${newViolation.violation_number} بقيمة ${newViolation.amount} ر.س (على سيارة: ${vehicle?.model || ''})`,
+          entityName: `رصد مخالفة مرورية رقم: ${newViolation.violation_number} بقيمة ${newViolation.amount} ${currencySymbol} (على سيارة: ${vehicle?.model || ''})`,
           details: newViolation
         });
 
@@ -259,7 +259,7 @@ export default function ViolationsPage() {
                   <span className="text-xs text-slate-500 block text-left">قيمة الغرامة:</span>
                   <span className="text-xl font-black text-rose-400 mt-0.5 block flex items-baseline gap-0.5">
                     {violation.amount}
-                    <span className="text-xs font-normal text-slate-500">ر.س</span>
+                    <span className="text-xs font-normal text-slate-500">{currencySymbol}</span>
                   </span>
                 </div>
 
@@ -313,7 +313,7 @@ export default function ViolationsPage() {
                   </div>
 
                   <div className="flex flex-col gap-1.5">
-                    <label className="text-xs text-slate-400 font-semibold">قيمة الغرامة (ر.س)</label>
+                    <label className="text-xs text-slate-400 font-semibold">قيمة الغرامة ({currencySymbol})</label>
                     <input
                       required
                       type="number"

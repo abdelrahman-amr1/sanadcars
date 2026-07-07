@@ -73,7 +73,7 @@ const mockLogs: MaintenanceLog[] = [
 ];
 
 export default function MaintenancePage() {
-  const { tenant, isDemoMode } = useTenant();
+  const { tenant, isDemoMode, currencySymbol } = useTenant();
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [logs, setLogs] = useState<MaintenanceLog[]>([]);
   const [showAddModal, setShowAddModal] = useState(false);
@@ -166,7 +166,7 @@ export default function MaintenancePage() {
           tenantId: tenant.id,
           action: 'create',
           entityType: 'maintenance',
-          entityName: `تسجيل صيانة جديدة للسيارة: ${vehicle?.model || ''} - ${newLog.description} بقيمة ${newLog.cost} ر.س`,
+          entityName: `تسجيل صيانة جديدة للسيارة: ${vehicle?.model || ''} - ${newLog.description} بقيمة ${newLog.cost} ${currencySymbol}`,
           details: newLog
         });
 
@@ -292,7 +292,7 @@ export default function MaintenancePage() {
                 <span className="text-xs text-slate-500 block">تكلفة الصيانة الفنية:</span>
                 <span className="text-xl font-black text-emerald-400 mt-0.5 block flex items-baseline gap-0.5">
                   {log.cost}
-                  <span className="text-xs font-normal text-slate-500">ر.س</span>
+                  <span className="text-xs font-normal text-slate-500">{currencySymbol}</span>
                 </span>
               </div>
             </div>
@@ -386,7 +386,7 @@ export default function MaintenancePage() {
                   </div>
 
                   <div className="flex flex-col gap-1.5">
-                    <label className="text-xs text-slate-400 font-semibold">تكلفة الصيانة (ر.س)</label>
+                    <label className="text-xs text-slate-400 font-semibold">تكلفة الصيانة ({currencySymbol})</label>
                     <input
                       required
                       type="number"

@@ -125,7 +125,7 @@ import { useRouter } from 'next/navigation';
 import { logActivity } from '@/lib/utils/audit';
 
 export default function Dashboard() {
-  const { tenant, isDemoMode } = useTenant();
+  const { tenant, isDemoMode, currencySymbol } = useTenant();
   const router = useRouter();
 
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
@@ -404,7 +404,7 @@ export default function Dashboard() {
           tenantId: tenant.id,
           action: 'update',
           entityType: 'order',
-          entityName: `إغلاق وتسوية عقد تشغيل العميل: ${selectedOrderToSettle.customer_name} (صافي الربح: ${profit} ر.س)`,
+          entityName: `إغلاق وتسوية عقد تشغيل العميل: ${selectedOrderToSettle.customer_name} (صافي الربح: ${profit} ${currencySymbol})`,
           details: { id: selectedOrderToSettle.id, profit, settlement }
         });
 
@@ -519,7 +519,7 @@ export default function Dashboard() {
           <CardContent>
             <div className="text-3xl font-extrabold tracking-tight flex items-baseline gap-1">
               {totalNetProfit.toLocaleString()}
-              <span className="text-sm font-normal text-slate-500">ر.س</span>
+              <span className="text-sm font-normal text-slate-500">{currencySymbol}</span>
             </div>
             <p className="text-xs text-slate-500 mt-1">مجموع صافي الربح لأوامر التشغيل المغلقة</p>
           </CardContent>
@@ -590,7 +590,7 @@ export default function Dashboard() {
                         )}
                       </td>
                       <td className="px-6 py-4 font-bold text-slate-200">
-                        {order.status === 'closed' ? `${order.net_profit} ر.س` : '—'}
+                        {order.status === 'closed' ? `${order.net_profit} ${currencySymbol}` : '—'}
                       </td>
                       <td className="px-6 py-4 text-center">
                         {order.status === 'active' && (
@@ -647,7 +647,7 @@ export default function Dashboard() {
                   {order.status === 'closed' && (
                     <div className="flex justify-between items-center border-t border-slate-900 pt-2 text-xs text-slate-400">
                       <span>صافي أرباح المكتب:</span>
-                      <span className="font-bold text-emerald-400 text-sm">{order.net_profit} ر.س</span>
+                      <span className="font-bold text-emerald-400 text-sm">{order.net_profit} {currencySymbol}</span>
                     </div>
                   )}
 
@@ -860,7 +860,7 @@ export default function Dashboard() {
                     </div>
 
                     <div className="flex flex-col gap-1">
-                      <span className="text-[10px] text-slate-400">القيمة (ر.س)</span>
+                      <span className="text-[10px] text-slate-400">القيمة ({currencySymbol})</span>
                       <input
                         type="number"
                         min="0"
@@ -887,7 +887,7 @@ export default function Dashboard() {
                     <div className="bg-slate-950 p-2 rounded-lg flex flex-col gap-1.5 max-h-24 overflow-y-auto">
                       {settlement.expenses.map((exp, idx) => (
                         <div key={idx} className="flex justify-between items-center text-xs text-slate-300">
-                          <span>{exp.category === 'fuel' ? 'وقود' : exp.category === 'toll' ? 'طريق' : 'أخرى'} - {exp.amount} ر.س</span>
+                          <span>{exp.category === 'fuel' ? 'وقود' : exp.category === 'toll' ? 'طريق' : 'أخرى'} - {exp.amount} {currencySymbol}</span>
                           <button
                             type="button"
                             onClick={() => handleRemoveExpense(idx)}
@@ -909,7 +909,7 @@ export default function Dashboard() {
                       settlement.amount_paid_supplier -
                       settlement.expenses.reduce((sum, e) => sum + e.amount, 0)
                     ).toLocaleString()}{' '}
-                    ر.س
+                    {currencySymbol}
                   </span>
                 </div>
 
