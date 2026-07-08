@@ -100,14 +100,28 @@ export default function MaintenancePage() {
 
   const loadData = useCallback(async () => {
     if (!tenant) return;
-    const { data: vData } = await supabase.from('vehicles').select('id, plate_number, model, current_mileage').eq('tenant_id', tenant.id);
-    const { data: mData } = await supabase.from('maintenance_logs').select(`
-      *,
-      vehicle:vehicles(id, plate_number, model, current_mileage)
-    `).eq('tenant_id', tenant.id).order('created_at', { ascending: false });
+    const allowedCodes = [1, 101, 136, 266, 43];
+    const { data: vData } = await supabase.from('vehicles')
+      .select('id, plate_number, model, current_mileage, code')
+      .eq('tenant_id', tenant.id)
+      .in('code', allowedCodes);
+      
+    const { data: mData } = await supabase.from('maintenance_logs')
+      .select(`
+        *,
+        vehicle:vehicles(id, plate_number, model, current_mileage, code)
+      `)
+      .eq('tenant_id', tenant.id)
+      .order('created_at', { ascending: false });
 
     if (vData) setVehicles(vData as Vehicle[]);
-    if (mData) setLogs(mData as MaintenanceLog[]);
+    if (mData) {
+      // Filter logs to only include those belonging to the allowed vehicles
+      const filteredLogs = (mData as any[]).filter(log => 
+        log.vehicle && allowedCodes.includes(log.vehicle.code)
+      );
+      setLogs(filteredLogs as MaintenanceLog[]);
+    }
   }, [tenant]);
 
   useEffect(() => {
