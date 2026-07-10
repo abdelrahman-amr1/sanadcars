@@ -51,6 +51,7 @@ export default function SettingsPage() {
   // User management state
   const [members, setMembers] = useState<Member[]>([]);
   const [newMemberEmail, setNewMemberEmail] = useState('');
+  const [newMemberPassword, setNewMemberPassword] = useState('');
   const [newMemberRole, setNewMemberRole] = useState<'admin' | 'operator'>('operator');
   const [usersLoading, setUsersLoading] = useState(false);
 
@@ -201,47 +202,46 @@ export default function SettingsPage() {
     }
   };
 
-  // Add Member by Email
+  // Add Member by Email/Password directly
   const handleAddMember = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!tenant || !newMemberEmail.trim()) return;
+    if (!tenant || !newMemberEmail.trim() || !newMemberPassword.trim()) {
+      alert('يرجى إدخال البريد الإلكتروني وكلمة المرور');
+      return;
+    }
+    if (newMemberPassword.length < 6) {
+      alert('كلمة المرور يجب أن تكون 6 أحرف على الأقل');
+      return;
+    }
     setUsersLoading(true);
     try {
-      // 1. Resolve email to UUID via RPC function
-      const { data: resolvedUid, error: rpcError } = await supabase
-        .rpc('get_user_id_by_email', { email_address: newMemberEmail.trim() });
-
-      if (rpcError || !resolvedUid) {
-        alert('فشل العثور على هذا البريد الإلكتروني. يرجى التأكد من أن الموظف قام بإنشاء حساب بالمنصة أولاً.');
-        setUsersLoading(false);
-        return;
-      }
-
-      // 2. Upsert member into database
-      const { error } = await supabase
-        .from('tenant_members')
-        .upsert({
-          tenant_id: tenant.id,
-          user_id: resolvedUid,
-          role: newMemberRole
+      // Create user and add as tenant member via SQL RPC function
+      const { data: success, error: rpcError } = await supabase
+        .rpc('create_and_add_tenant_member', {
+          user_email: newMemberEmail.trim(),
+          user_password: newMemberPassword.trim(),
+          target_tenant_id: tenant.id,
+          target_role: newMemberRole
         });
 
-      if (error) throw error;
+      if (rpcError) throw rpcError;
 
       await logActivity({
         tenantId: tenant.id,
         action: 'create',
         entityType: 'member',
         entityName: `إضافة موظف جديد بالبريد: ${newMemberEmail.trim()}`,
-        details: { user_id: resolvedUid, email: newMemberEmail.trim(), role: newMemberRole }
+        details: { email: newMemberEmail.trim(), role: newMemberRole }
       });
 
-      alert('تم إضافة وتفويض العضو بنجاح!');
+      alert('تم إنشاء حساب الموظف وإضافته بنجاح!');
       setNewMemberEmail('');
+      setNewMemberPassword('');
       loadMembers();
     } catch (err) {
       console.error('Error adding member:', err);
-      alert('فشل إضافة العضو، يرجى المحاولة لاحقاً');
+      const errMsg = err instanceof Error ? err.message : 'فشل إضافة العضو';
+      alert(`فشل إضافة الموظف: ${errMsg}`);
     } finally {
       setUsersLoading(false);
     }
@@ -513,6 +513,20 @@ export default function SettingsPage() {
                     placeholder="مثال: employee@example.com"
                     value={newMemberEmail}
                     onChange={(e) => setNewMemberEmail(e.target.value)}
+                    className="bg-slate-950 border border-slate-850 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:ring-1 focus:ring-emerald-500 placeholder:text-slate-800 text-left"
+                    style={{ direction: 'ltr' }}
+                  />
+                </div>
+
+                <div className="flex-1 flex flex-col gap-1.5 w-full">
+                  <label className="text-xs text-slate-400 font-bold">كلمة المرور للحساب</label>
+                  <input
+                    required
+                    type="password"
+                    minLength={6}
+                    placeholder="مثال: 123456"
+                    value={newMemberPassword}
+                    onChange={(e) => setNewMemberPassword(e.target.value)}
                     className="bg-slate-950 border border-slate-850 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:ring-1 focus:ring-emerald-500 placeholder:text-slate-800 text-left"
                     style={{ direction: 'ltr' }}
                   />
